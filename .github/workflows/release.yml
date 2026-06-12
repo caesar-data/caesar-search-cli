@@ -31,7 +31,7 @@ jobs:
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: "dist/*.tar.gz, dist/*.zip"
+          subject-path: "dist-release/*.tar.gz, dist-release/*.zip"
 
   npm:
     needs: goreleaser
