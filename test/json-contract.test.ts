@@ -127,12 +127,12 @@ describe("json output contract", () => {
 describe("auth and attribution headers", () => {
   test("sends Authorization and X-Caesar-Client", async () => {
     const server = mockServer(() => ({ body: sampleSearchResponse }));
-    await runCli(["search", "x", "--json", "--key", "sk_live_testkey_abc123"], {
+    await runCli(["search", "x", "--json", "--key", "demo-key-abc123-not-a-secret"], {
       env: { CAESAR_BASE_URL: server.url },
     });
     server.stop();
     const headers = server.calls[0]?.headers ?? {};
-    expect(headers.authorization).toBe("Bearer sk_live_testkey_abc123");
+    expect(headers.authorization).toBe("Bearer demo-key-abc123-not-a-secret");
     expect(headers["x-caesar-client"]).toMatch(/^cli\//);
   });
 
@@ -192,16 +192,16 @@ describe("config and auth login", () => {
 
     const login = await runCli(["auth", "login", "--key", "-"], {
       env: withHome,
-      stdin: "sk_live_storedkey_xyz789\n",
+      stdin: "demo-key-xyz789-not-a-secret\n",
     });
     expect(login.code).toBe(0);
-    expect(login.stdout).not.toContain("sk_live_storedkey_xyz789");
+    expect(login.stdout).not.toContain("demo-key-xyz789-not-a-secret");
 
     const status = await runCli(["auth", "status", "--json"], { env: withHome });
     const payload = JSON.parse(status.stdout);
     expect(payload.key_present).toBe(true);
     expect(payload.key_source).toBe("config");
-    expect(payload.key_masked).not.toContain("storedkey_xyz789");
+    expect(payload.key_masked).not.toContain("xyz789-not-a-secret");
 
     const logout = await runCli(["auth", "logout"], { env: withHome });
     expect(logout.code).toBe(0);

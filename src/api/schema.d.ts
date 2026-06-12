@@ -4,801 +4,792 @@
  */
 
 export interface paths {
-  "/v1/document": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/v1/document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect one canonical document and retrieve selected content. */
+        post: operations["get-document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Inspect one canonical document and retrieve selected content. */
-    post: operations["get-document"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/v1/feedback": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/v1/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Persist an agent or evaluation feedback event. */
+        post: operations["record-feedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Persist an agent or evaluation feedback event. */
-    post: operations["record-feedback"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/v1/search": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run ranked retrieval over canonical documents and passages. */
+        post: operations["search"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Run ranked retrieval over canonical documents and passages. */
-    post: operations["search"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    Access: {
-      rate_limit: components["schemas"]["RateLimit"];
-      tier: string;
+    schemas: {
+        Access: {
+            rate_limit: components["schemas"]["RateLimit"];
+            tier: string;
+        };
+        CaptureHistoryEntry: {
+            capture_id: string;
+            capture_time: string;
+            content_digest: string;
+            content_format?: string;
+        };
+        ContentRange: {
+            /** @description Optional capture pin; a stale_range warning is returned when the latest capture differs. */
+            capture_id?: string;
+            /**
+             * Format: int64
+             * @description Maximum characters for this range; overrides content.max_chars.
+             */
+            max_chars?: number;
+            /**
+             * Format: int64
+             * @description Character offset to start content from.
+             */
+            start_char?: number;
+        };
+        Document: {
+            canonical_url: string;
+            content_digest?: string;
+            doc_id: string;
+            first_seen_at: string;
+            headings?: string[] | null;
+            last_seen_at: string;
+            latest_capture_id?: string;
+            meta_description?: string;
+            published_at?: string;
+            source_url: string;
+            title?: string;
+        };
+        DocumentContent: {
+            /** Format: int64 */
+            char_count: number;
+            format: string;
+            selection: string;
+            /** Format: int64 */
+            start_char?: number;
+            text: string;
+            truncated: boolean;
+        };
+        DocumentContentRequest: {
+            /**
+             * @description Returned content format.
+             * @default markdown
+             * @enum {string}
+             */
+            format: "text" | "markdown";
+            /** @description Whether passage offsets should be included when available. */
+            include_offsets?: boolean;
+            /**
+             * Format: int64
+             * @description Maximum content.text characters to return.
+             * @default 12000
+             */
+            max_chars: number;
+            /** @description Passage IDs to return when selection is passage_ids. */
+            passage_ids?: string[] | null;
+            /** @description Continuation read: return content starting at a character offset of the same document. */
+            range?: components["schemas"]["ContentRange"];
+            /**
+             * @description Content selection strategy.
+             * @default query_relevant
+             * @enum {string}
+             */
+            selection: "none" | "query_relevant" | "top_passages" | "passage_ids" | "full_document";
+        };
+        DocumentProvenance: {
+            capture_id: string;
+            capture_time: string;
+        };
+        ErrorBody: {
+            /** @description Stable machine-readable error code. */
+            code: string;
+            /** @description Optional structured error details. */
+            details?: {
+                [key: string]: unknown;
+            };
+            /** @description Human-readable error message. */
+            message: string;
+        };
+        FeedbackAgentContext: {
+            /** @description Calling model identifier. */
+            client_model?: string;
+            /** @description Agent task type or evaluation bucket. */
+            task_type?: string;
+        };
+        Passage: {
+            /** Format: int64 */
+            char_end?: number;
+            /** Format: int64 */
+            char_start?: number;
+            doc_id: string;
+            /** Format: int64 */
+            ordinal: number;
+            passage_id: string;
+            section_heading?: string;
+            section_path?: string[] | null;
+            text: string;
+        };
+        Ranking: {
+            mode: string;
+            ranker_version: string;
+            score_scope: string;
+        };
+        RateLimit: {
+            /** Format: int64 */
+            limit_rps: number;
+            /** Format: int64 */
+            remaining: number;
+            reset_at: string;
+        };
+        ResponseBudget: {
+            /**
+             * Format: int64
+             * @description Maximum serialized response size in characters. Roughly 4 characters per token.
+             */
+            max_chars_total?: number;
+            /**
+             * @description What to do when the budget binds: shed payload in the documented order, or fail with response_too_large.
+             * @default shed
+             * @enum {string}
+             */
+            on_exceed: "shed" | "error";
+        };
+        ResponseShape: {
+            /** @description Total serialized response budget in characters with deterministic shedding. */
+            budget?: components["schemas"]["ResponseBudget"];
+            /**
+             * @description Field preset: ids_only (rank, doc_id, url, title), compact (adds snippet, score, key dates), standard (today's default), full (adds provenance).
+             * @default standard
+             * @enum {string}
+             */
+            verbosity: "ids_only" | "compact" | "standard" | "full";
+        };
+        SearchResult: {
+            canonical_url: string;
+            description?: string;
+            doc_id: string;
+            metadata?: components["schemas"]["SearchResultMetadata"];
+            passages?: components["schemas"]["Passage"][] | null;
+            provenance?: components["schemas"]["DocumentProvenance"];
+            /** Format: int64 */
+            rank: number;
+            score?: components["schemas"]["SearchScore"];
+            snippet?: string;
+            source_url?: string;
+            title?: string;
+        };
+        SearchResultMetadata: {
+            content_digest?: string;
+            extracted_at?: string;
+            first_seen_at?: string;
+            last_crawled_at?: string;
+            last_seen_at?: string;
+            published_at?: string;
+        };
+        SearchScore: {
+            /** Format: double */
+            value: number;
+        };
+        Usage: {
+            /** Format: int64 */
+            approx_tokens: number;
+            /** Format: int64 */
+            bytes_returned: number;
+            /** Format: int64 */
+            requests: number;
+        };
+        Warning: {
+            code: string;
+            details?: {
+                [key: string]: unknown;
+            };
+            message: string;
+        };
     };
-    CaptureHistoryEntry: {
-      capture_id: string;
-      capture_time: string;
-      content_digest: string;
-      content_format?: string;
-    };
-    ContentRange: {
-      /** @description Optional capture pin; a stale_range warning is returned when the latest capture differs. */
-      capture_id?: string;
-      /**
-       * Format: int64
-       * @description Maximum characters for this range; overrides content.max_chars.
-       */
-      max_chars?: number;
-      /**
-       * Format: int64
-       * @description Character offset to start content from.
-       */
-      start_char?: number;
-    };
-    Document: {
-      canonical_url: string;
-      content_digest?: string;
-      doc_id: string;
-      first_seen_at: string;
-      headings?: string[] | null;
-      last_seen_at: string;
-      latest_capture_id?: string;
-      meta_description?: string;
-      published_at?: string;
-      source_url: string;
-      title?: string;
-    };
-    DocumentContent: {
-      /** Format: int64 */
-      char_count: number;
-      format: string;
-      selection: string;
-      /** Format: int64 */
-      start_char?: number;
-      text: string;
-      truncated: boolean;
-    };
-    DocumentContentRequest: {
-      /**
-       * @description Returned content format.
-       * @default markdown
-       * @enum {string}
-       */
-      format: "text" | "markdown";
-      /** @description Whether passage offsets should be included when available. */
-      include_offsets?: boolean;
-      /**
-       * Format: int64
-       * @description Maximum content.text characters to return.
-       * @default 12000
-       */
-      max_chars: number;
-      /** @description Passage IDs to return when selection is passage_ids. */
-      passage_ids?: string[] | null;
-      /** @description Continuation read: return content starting at a character offset of the same document. */
-      range?: components["schemas"]["ContentRange"];
-      /**
-       * @description Content selection strategy.
-       * @default query_relevant
-       * @enum {string}
-       */
-      selection: "none" | "query_relevant" | "top_passages" | "passage_ids" | "full_document";
-    };
-    DocumentProvenance: {
-      capture_id: string;
-      capture_time: string;
-    };
-    ErrorBody: {
-      /** @description Stable machine-readable error code. */
-      code: string;
-      /** @description Optional structured error details. */
-      details?: {
-        [key: string]: unknown;
-      };
-      /** @description Human-readable error message. */
-      message: string;
-    };
-    FeedbackAgentContext: {
-      /** @description Calling model identifier. */
-      client_model?: string;
-      /** @description Agent task type or evaluation bucket. */
-      task_type?: string;
-    };
-    Passage: {
-      /** Format: int64 */
-      char_end?: number;
-      /** Format: int64 */
-      char_start?: number;
-      doc_id: string;
-      /** Format: int64 */
-      ordinal: number;
-      passage_id: string;
-      section_heading?: string;
-      section_path?: string[] | null;
-      text: string;
-    };
-    Ranking: {
-      mode: string;
-      ranker_version: string;
-      score_scope: string;
-    };
-    RateLimit: {
-      /** Format: int64 */
-      limit_rps: number;
-      /** Format: int64 */
-      remaining: number;
-      reset_at: string;
-    };
-    ResponseBudget: {
-      /**
-       * Format: int64
-       * @description Maximum serialized response size in characters. Roughly 4 characters per token.
-       */
-      max_chars_total?: number;
-      /**
-       * @description What to do when the budget binds: shed payload in the documented order, or fail with response_too_large.
-       * @default shed
-       * @enum {string}
-       */
-      on_exceed: "shed" | "error";
-    };
-    ResponseShape: {
-      /** @description Total serialized response budget in characters with deterministic shedding. */
-      budget?: components["schemas"]["ResponseBudget"];
-      /**
-       * @description Field preset: ids_only (rank, doc_id, url, title), compact (adds snippet, score, key dates), standard (today's default), full (adds provenance).
-       * @default standard
-       * @enum {string}
-       */
-      verbosity: "ids_only" | "compact" | "standard" | "full";
-    };
-    SearchResult: {
-      canonical_url: string;
-      description?: string;
-      doc_id: string;
-      metadata?: components["schemas"]["SearchResultMetadata"];
-      passages?: components["schemas"]["Passage"][] | null;
-      provenance?: components["schemas"]["DocumentProvenance"];
-      /** Format: int64 */
-      rank: number;
-      score?: components["schemas"]["SearchScore"];
-      snippet?: string;
-      source_url?: string;
-      title?: string;
-    };
-    SearchResultMetadata: {
-      content_digest?: string;
-      extracted_at?: string;
-      first_seen_at?: string;
-      last_crawled_at?: string;
-      last_seen_at?: string;
-      published_at?: string;
-    };
-    SearchScore: {
-      /** Format: double */
-      value: number;
-    };
-    Usage: {
-      /** Format: int64 */
-      approx_tokens: number;
-      /** Format: int64 */
-      bytes_returned: number;
-      /** Format: int64 */
-      requests: number;
-    };
-    Warning: {
-      code: string;
-      details?: {
-        [key: string]: unknown;
-      };
-      message: string;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  "get-document": {
-    parameters: {
-      query?: never;
-      header?: {
-        /** @description Optional client session identifier. */
-        "X-Session-ID"?: string;
-      };
-      path?: never;
-      cookie?: never;
+    "get-document": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional client session identifier. */
+                "X-Session-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uri
+                     * @description Canonical URL lookup key. Either doc_id or canonical_url is required.
+                     */
+                    canonical_url?: string;
+                    /** @description Controls for returned document content. */
+                    content?: components["schemas"]["DocumentContentRequest"];
+                    /** @description Optional debug controls for internal evaluation. */
+                    debug?: {
+                        [key: string]: unknown;
+                    };
+                    /**
+                     * Format: uuid
+                     * @description Canonical document identifier. Either doc_id or canonical_url is required.
+                     * @example 0c944fa8-4c8f-4f48-9b08-0fb2fd3438ec
+                     */
+                    doc_id?: string;
+                    /** @description Optional document sections to include. */
+                    include?: ("metadata" | "passages" | "capture_history" | "content")[] | null;
+                    /** @description Optional query context for passage selection. */
+                    query?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Document payload. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        access: components["schemas"]["Access"];
+                        capture_history?: components["schemas"]["CaptureHistoryEntry"][] | null;
+                        content?: components["schemas"]["DocumentContent"];
+                        doc: components["schemas"]["Document"];
+                        passages?: components["schemas"]["Passage"][] | null;
+                        provenance?: components["schemas"]["DocumentProvenance"];
+                        request_id: string;
+                        session_id: string;
+                        usage?: components["schemas"]["Usage"];
+                        warnings?: components["schemas"]["Warning"][] | null;
+                    };
+                };
+            };
+            /** @description Validation error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Document or passage not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Internal error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json": {
-          /**
-           * Format: uri
-           * @description Canonical URL lookup key. Either doc_id or canonical_url is required.
-           */
-          canonical_url?: string;
-          /** @description Controls for returned document content. */
-          content?: components["schemas"]["DocumentContentRequest"];
-          /** @description Optional debug controls for internal evaluation. */
-          debug?: {
-            [key: string]: unknown;
-          };
-          /**
-           * Format: uuid
-           * @description Canonical document identifier. Either doc_id or canonical_url is required.
-           * @example 0c944fa8-4c8f-4f48-9b08-0fb2fd3438ec
-           */
-          doc_id?: string;
-          /** @description Optional document sections to include. */
-          include?: ("metadata" | "passages" | "capture_history" | "content")[] | null;
-          /** @description Optional query context for passage selection. */
-          query?: string;
+    "record-feedback": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional client session identifier. */
+                "X-Session-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
         };
-      };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Optional calling-agent context. */
+                    agent_context?: components["schemas"]["FeedbackAgentContext"];
+                    /**
+                     * Format: uuid
+                     * @description Document associated with the feedback event.
+                     */
+                    doc_id?: string;
+                    /**
+                     * @description Feedback event classification.
+                     * @enum {string}
+                     */
+                    event_type: "result_helpful" | "result_not_helpful" | "passage_used" | "read_abandoned" | "duplicate_result" | "stale_result" | "spam_or_low_quality" | "missing_expected_source" | "unsafe_or_policy_issue";
+                    /** @description Optional notes for human review or offline evaluation. */
+                    notes?: string;
+                    /**
+                     * Format: uuid
+                     * @description Passage associated with the feedback event.
+                     */
+                    passage_id?: string;
+                    /** @description Query associated with the feedback event. */
+                    query?: string;
+                    /**
+                     * Format: int64
+                     * @description One-based result rank, when applicable.
+                     */
+                    rank?: number;
+                    /**
+                     * Format: uuid
+                     * @description Search request identifier returned by /v1/search.
+                     */
+                    search_id?: string;
+                    /**
+                     * Format: uuid
+                     * @description Optional client session identifier.
+                     */
+                    session_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Feedback accepted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        accepted: boolean;
+                        access: components["schemas"]["Access"];
+                        feedback_id: string;
+                        request_id: string;
+                        session_id: string;
+                        usage?: components["schemas"]["Usage"];
+                    };
+                };
+            };
+            /** @description Validation error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Search or document target not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Internal error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+        };
     };
-    responses: {
-      /** @description Document payload. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    search: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional client session identifier. */
+                "X-Session-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": {
-            access: components["schemas"]["Access"];
-            capture_history?: components["schemas"]["CaptureHistoryEntry"][] | null;
-            content?: components["schemas"]["DocumentContent"];
-            doc: components["schemas"]["Document"];
-            passages?: components["schemas"]["Passage"][] | null;
-            provenance?: components["schemas"]["DocumentProvenance"];
-            request_id: string;
-            session_id: string;
-            usage?: components["schemas"]["Usage"];
-            warnings?: components["schemas"]["Warning"][] | null;
-          };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Optional calling model identifier for analytics and tuning. */
+                    client_model?: string;
+                    /** @description Optional content-return controls. */
+                    content?: {
+                        [key: string]: unknown;
+                    };
+                    /** @description Optional debug controls for internal evaluation. */
+                    debug?: {
+                        [key: string]: unknown;
+                    };
+                    /** @description Optional structured filters. */
+                    filters?: {
+                        [key: string]: unknown;
+                    };
+                    /** @description Optional freshness requirements for time-sensitive queries. */
+                    freshness_policy?: {
+                        [key: string]: unknown;
+                    };
+                    /**
+                     * Format: int64
+                     * @description Maximum number of ranked results to return.
+                     * @default 10
+                     */
+                    max_results?: number;
+                    /**
+                     * @description Retrieval budget and ranking mode.
+                     * @default standard
+                     * @enum {string}
+                     */
+                    mode?: "fast" | "standard" | "research";
+                    /** @description Optional task objective used by agents to shape retrieval. */
+                    objective?: string;
+                    /**
+                     * @description Original user or agent query.
+                     * @example linux kernel amd gpu suspend
+                     */
+                    query: string;
+                    /** @description Optional response shaping: verbosity preset and serialized-size budget. */
+                    response?: components["schemas"]["ResponseShape"];
+                    /** @description Optional caller-provided query rewrites. */
+                    search_queries?: string[] | null;
+                    /**
+                     * Format: uuid
+                     * @description Optional client session identifier.
+                     */
+                    session_id?: string;
+                    /** @description Optional source inclusion and exclusion policy. */
+                    source_policy?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
         };
-      };
-      /** @description Validation error. */
-      400: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            /** @description Search results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        access?: components["schemas"]["Access"];
+                        ranking?: components["schemas"]["Ranking"];
+                        request_id: string;
+                        results: components["schemas"]["SearchResult"][] | null;
+                        search_id: string;
+                        session_id: string;
+                        truncated?: boolean;
+                        usage?: components["schemas"]["Usage"];
+                        warnings?: components["schemas"]["Warning"][] | null;
+                    };
+                };
+            };
+            /** @description Validation error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
+            /** @description Internal error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Error details. */
+                        error: components["schemas"]["ErrorBody"];
+                        /** @description Server request identifier. */
+                        request_id: string;
+                        /**
+                         * @description Envelope discriminator.
+                         * @enum {string}
+                         */
+                        type: "error";
+                    };
+                };
+            };
         };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Missing or invalid API key. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description API key does not have the required scope. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Document or passage not found. */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Rate limited. */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Internal error. */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
     };
-  };
-  "record-feedback": {
-    parameters: {
-      query?: never;
-      header?: {
-        /** @description Optional client session identifier. */
-        "X-Session-ID"?: string;
-      };
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          /** @description Optional calling-agent context. */
-          agent_context?: components["schemas"]["FeedbackAgentContext"];
-          /**
-           * Format: uuid
-           * @description Document associated with the feedback event.
-           */
-          doc_id?: string;
-          /**
-           * @description Feedback event classification.
-           * @enum {string}
-           */
-          event_type:
-            | "result_helpful"
-            | "result_not_helpful"
-            | "passage_used"
-            | "read_abandoned"
-            | "duplicate_result"
-            | "stale_result"
-            | "spam_or_low_quality"
-            | "missing_expected_source"
-            | "unsafe_or_policy_issue";
-          /** @description Optional notes for human review or offline evaluation. */
-          notes?: string;
-          /**
-           * Format: uuid
-           * @description Passage associated with the feedback event.
-           */
-          passage_id?: string;
-          /** @description Query associated with the feedback event. */
-          query?: string;
-          /**
-           * Format: int64
-           * @description One-based result rank, when applicable.
-           */
-          rank?: number;
-          /**
-           * Format: uuid
-           * @description Search request identifier returned by /v1/search.
-           */
-          search_id?: string;
-          /**
-           * Format: uuid
-           * @description Optional client session identifier.
-           */
-          session_id?: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Feedback accepted. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            accepted: boolean;
-            access: components["schemas"]["Access"];
-            feedback_id: string;
-            request_id: string;
-            session_id: string;
-            usage?: components["schemas"]["Usage"];
-          };
-        };
-      };
-      /** @description Validation error. */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Missing or invalid API key. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description API key does not have the required scope. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Search or document target not found. */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Rate limited. */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Internal error. */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-    };
-  };
-  search: {
-    parameters: {
-      query?: never;
-      header?: {
-        /** @description Optional client session identifier. */
-        "X-Session-ID"?: string;
-      };
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          /** @description Optional calling model identifier for analytics and tuning. */
-          client_model?: string;
-          /** @description Optional content-return controls. */
-          content?: {
-            [key: string]: unknown;
-          };
-          /** @description Optional debug controls for internal evaluation. */
-          debug?: {
-            [key: string]: unknown;
-          };
-          /** @description Optional structured filters. */
-          filters?: {
-            [key: string]: unknown;
-          };
-          /** @description Optional freshness requirements for time-sensitive queries. */
-          freshness_policy?: {
-            [key: string]: unknown;
-          };
-          /**
-           * Format: int64
-           * @description Maximum number of ranked results to return.
-           * @default 10
-           */
-          max_results?: number;
-          /**
-           * @description Retrieval budget and ranking mode.
-           * @default standard
-           * @enum {string}
-           */
-          mode?: "fast" | "standard" | "research";
-          /** @description Optional task objective used by agents to shape retrieval. */
-          objective?: string;
-          /**
-           * @description Original user or agent query.
-           * @example linux kernel amd gpu suspend
-           */
-          query: string;
-          /** @description Optional response shaping: verbosity preset and serialized-size budget. */
-          response?: components["schemas"]["ResponseShape"];
-          /** @description Optional caller-provided query rewrites. */
-          search_queries?: string[] | null;
-          /**
-           * Format: uuid
-           * @description Optional client session identifier.
-           */
-          session_id?: string;
-          /** @description Optional source inclusion and exclusion policy. */
-          source_policy?: {
-            [key: string]: unknown;
-          };
-        };
-      };
-    };
-    responses: {
-      /** @description Search results. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            access?: components["schemas"]["Access"];
-            ranking?: components["schemas"]["Ranking"];
-            request_id: string;
-            results: components["schemas"]["SearchResult"][] | null;
-            search_id: string;
-            session_id: string;
-            truncated?: boolean;
-            usage?: components["schemas"]["Usage"];
-            warnings?: components["schemas"]["Warning"][] | null;
-          };
-        };
-      };
-      /** @description Validation error. */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Missing or invalid API key. */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description API key does not have the required scope. */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Rate limited. */
-      429: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-      /** @description Internal error. */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            /** @description Error details. */
-            error: components["schemas"]["ErrorBody"];
-            /** @description Server request identifier. */
-            request_id: string;
-            /**
-             * @description Envelope discriminator.
-             * @enum {string}
-             */
-            type: "error";
-          };
-        };
-      };
-    };
-  };
 }

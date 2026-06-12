@@ -1,0 +1,13 @@
+# Test fixtures in early history match secret-shaped patterns but were never
+# real credentials.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "secret-shaped test fixtures"
+regexes = [
+  '''sk_live_testkey_abc123''',
+  '''sk_live_storedkey_xyz789''',
+  '''flag-key-123456''',
+  '''env-key-123456''',
+]
