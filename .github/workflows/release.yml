@@ -42,12 +42,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
+      # No registry-url here: setup-node would write an .npmrc with a
+      # placeholder NODE_AUTH_TOKEN, which makes npm take the token auth path
+      # and skip OIDC trusted publishing entirely.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
-      # Trusted publishing (OIDC): no token. Requires a recent npm CLI and
-      # the trusted-publisher config on npmjs.com pointing at this workflow.
       - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: bun run build
