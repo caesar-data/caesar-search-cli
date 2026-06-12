@@ -11,4 +11,4 @@ Last updated: 2026-06-12 (v0.1.0)
 
 Deferred: Docker image, Scoop/winget, pip wrapper, `.mcpb`, cosign signatures (configured for CI releases via OIDC), official MCP registry entry (belongs to the MCP server).
 
-Release flow: tag `v*` → `release.yml` runs GoReleaser (binaries, archives, checksums, SBOM, formula push) then `npm publish --provenance`. Required repo secrets: `HOMEBREW_TAP_GITHUB_TOKEN` (fine-grained PAT, contents:write on caesar-data/homebrew-tap), `NPM_TOKEN`.
+Release flow: tag `v*` → `release.yml` runs GoReleaser (binaries, archives, checksums, SBOM, formula push) then `npm publish --provenance`. npm uses trusted publishing (OIDC, no token; configured on npmjs.com against release.yml). The only optional secret is `HOMEBREW_TAP_GITHUB_TOKEN` (fine-grained PAT, contents:write on caesar-data/homebrew-tap); without it CI skips the formula push and the tap is updated manually.

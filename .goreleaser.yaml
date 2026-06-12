@@ -54,6 +54,9 @@ changelog:
 brews:
   - name: caesar-search
     directory: Formula
+    # Skip the tap push when no tap token is configured (e.g. CI before the
+    # HOMEBREW_TAP_GITHUB_TOKEN secret exists); the release itself still ships.
+    skip_upload: '{{ if .Env.HOMEBREW_TAP_GITHUB_TOKEN }}false{{ else }}true{{ end }}'
     repository:
       owner: caesar-data
       name: homebrew-tap
