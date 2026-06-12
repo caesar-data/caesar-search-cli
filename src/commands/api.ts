@@ -7,14 +7,7 @@ const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 async function readBody(input: string | undefined): Promise<unknown> {
   if (input === undefined) return undefined;
-  let raw: string;
-  if (input === "-") {
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
-    raw = Buffer.concat(chunks).toString("utf8");
-  } else {
-    raw = readFileSync(input, "utf8");
-  }
+  const raw = input === "-" ? readFileSync(0, "utf8") : readFileSync(input, "utf8");
   try {
     return JSON.parse(raw);
   } catch {

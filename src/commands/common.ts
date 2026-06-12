@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { ApiClient } from "../api/client";
 import { badInput } from "../output/exit";
@@ -30,11 +31,9 @@ export function jsonMode(command: Command): boolean {
 
 export async function argOrStdin(value: string, name: string): Promise<string> {
   if (value !== "-") return value;
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(Buffer.from(chunk));
-  }
-  const text = Buffer.concat(chunks).toString("utf8").trim();
+  // readFileSync(0) reads fd 0 to EOF and behaves identically under Node and
+  // Bun on every platform; async-iterating process.stdin does not.
+  const text = readFileSync(0, "utf8").trim();
   if (text.length === 0) throw badInput(`stdin was empty; pass a ${name} or pipe one in`);
   return text;
 }

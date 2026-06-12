@@ -45,8 +45,12 @@ changelog:
       - "^test:"
       - "^chore:"
 
-homebrew_casks:
+# Formula rather than cask: un-notarized cask binaries are quarantined and
+# killed by Gatekeeper on modern macOS; formulas skip the quarantine xattr.
+# Revisit the cask + notarization once an Apple Developer account exists.
+brews:
   - name: caesar-search
+    directory: Formula
     repository:
       owner: caesar-data
       name: homebrew-tap
@@ -57,6 +61,8 @@ homebrew_casks:
     commit_author:
       name: caesar-release-bot
       email: releases@caesar.xyz
+    test: |
+      assert_match "caesar-search", shell_output("#{bin}/caesar-search --version")
 
 release:
   github:
