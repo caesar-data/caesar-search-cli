@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { type CliConfig, configPath, deleteConfigKey, maskKey, readConfig, writeConfig } from "../config";
 import { badInput } from "../output/exit";
 import { emitData } from "../output/render";
-import { jsonMode } from "./common";
+import { outputOptions } from "./common";
 
 const KEYS: (keyof CliConfig)[] = ["api_key", "base_url"];
 
@@ -29,7 +29,7 @@ export function registerConfig(program: Command): void {
       const value = readConfig()[key];
       emitData(
         { key, value: display(key, value) },
-        { json: jsonMode(command) },
+        outputOptions(command),
         () => display(key, value) ?? "(unset)",
       );
     });
@@ -43,7 +43,7 @@ export function registerConfig(program: Command): void {
       const current = readConfig();
       current[key] = value;
       writeConfig(current);
-      emitData({ key, stored: true }, { json: jsonMode(command) }, () => `set ${key}`);
+      emitData({ key, stored: true }, outputOptions(command), () => `set ${key}`);
     });
 
   config
@@ -52,18 +52,18 @@ export function registerConfig(program: Command): void {
     .action(async (rawKey: string, _options, command: Command) => {
       const key = assertKey(rawKey);
       deleteConfigKey(key);
-      emitData({ key, removed: true }, { json: jsonMode(command) }, () => `unset ${key}`);
+      emitData({ key, removed: true }, outputOptions(command), () => `unset ${key}`);
     });
 
   config.command("list").action(async (_options, command: Command) => {
     const current = readConfig();
     const entries = Object.fromEntries(KEYS.map((key) => [key, display(key, current[key])]));
-    emitData(entries, { json: jsonMode(command) }, () =>
+    emitData(entries, outputOptions(command), () =>
       KEYS.map((key) => `${key} = ${display(key, current[key]) ?? "(unset)"}`).join("\n"),
     );
   });
 
   config.command("path").action(async (_options, command: Command) => {
-    emitData({ path: configPath() }, { json: jsonMode(command) }, () => configPath());
+    emitData({ path: configPath() }, outputOptions(command), () => configPath());
   });
 }

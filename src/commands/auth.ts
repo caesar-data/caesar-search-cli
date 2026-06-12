@@ -3,7 +3,7 @@ import type { Command } from "commander";
 import { configPath, deleteConfigKey, maskKey, readConfig, resolveKey, writeConfig } from "../config";
 import { badInput } from "../output/exit";
 import { emitData } from "../output/render";
-import { argOrStdin, clientFromCommand, jsonMode } from "./common";
+import { argOrStdin, clientFromCommand, outputOptions } from "./common";
 
 async function promptHidden(question: string): Promise<string> {
   if (!process.stdin.isTTY) {
@@ -46,7 +46,7 @@ export function registerAuth(program: Command): void {
         api_reachable: reachable,
         config_path: configPath(),
       };
-      emitData(payload, { json: jsonMode(command) }, () =>
+      emitData(payload, outputOptions(command), () =>
         [
           `key:       ${resolved.key ? `${maskKey(resolved.key)} (from ${resolved.source})` : "not set"}`,
           `base url:  ${client.baseUrl}`,
@@ -75,7 +75,7 @@ export function registerAuth(program: Command): void {
       writeConfig(config);
       emitData(
         { stored: true, config_path: configPath(), key_masked: maskKey(key) },
-        { json: jsonMode(command) },
+        outputOptions(command),
         () => `stored key ${maskKey(key)} in ${configPath()}`,
       );
     });
@@ -85,6 +85,6 @@ export function registerAuth(program: Command): void {
     .description("Remove the stored API key from the config file.")
     .action(async (_options, command: Command) => {
       deleteConfigKey("api_key");
-      emitData({ removed: true }, { json: jsonMode(command) }, () => "removed stored API key");
+      emitData({ removed: true }, outputOptions(command), () => "removed stored API key");
     });
 }

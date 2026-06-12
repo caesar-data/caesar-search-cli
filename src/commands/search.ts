@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { z } from "zod";
 import { badInput } from "../output/exit";
 import { emitData, renderSearchHuman } from "../output/render";
-import { argOrStdin, clientFromCommand, jsonMode, parsePositiveInt } from "./common";
+import { argOrStdin, clientFromCommand, outputOptions, parsePositiveInt } from "./common";
 
 const modeSchema = z.enum(["fast", "standard", "research"]);
 const formatSchema = z.enum(["ids_only", "compact", "standard", "full"]);
@@ -45,6 +45,6 @@ Examples:
 
       const client = clientFromCommand(command);
       const response = await client.post("/v1/search", body);
-      emitData(response, { json: jsonMode(command) }, renderSearchHuman);
+      emitData(response, outputOptions(command), renderSearchHuman);
     });
 }

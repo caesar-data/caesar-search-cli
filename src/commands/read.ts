@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { badInput } from "../output/exit";
 import { emitData, renderDocumentHuman } from "../output/render";
-import { argOrStdin, clientFromCommand, jsonMode, looksLikeDocID, parsePositiveInt } from "./common";
+import { argOrStdin, clientFromCommand, looksLikeDocID, outputOptions, parsePositiveInt } from "./common";
 
 const INCLUDE_SECTIONS = ["metadata", "content", "passages", "capture_history"];
 
@@ -59,7 +59,7 @@ Examples:
 
       const client = clientFromCommand(actionCommand);
       const response = await client.post("/v1/document", body);
-      emitData(response, { json: jsonMode(actionCommand) }, renderDocumentHuman);
+      emitData(response, outputOptions(actionCommand), renderDocumentHuman);
     });
   return void command;
 }

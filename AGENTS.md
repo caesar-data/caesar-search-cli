@@ -7,6 +7,8 @@ Guidance for AI agents using and maintaining `caesar-search`.
 - Always pass `--json` for machine-readable output. Data goes to stdout; errors are a JSON envelope `{"error":{"code","message","hint"}}` on stderr.
 - Exit codes: `0` ok, `2` bad input, `3` auth, `4` API error, `5` timeout. Branch on these, not on output parsing.
 - The standard loop: `search` → pick a `doc_id` → `read` it → optionally `feedback`.
+- For big results, write to a file instead of stdout: `-o /tmp/results.json` suppresses stdout entirely, so harness output limits can't truncate the JSON mid-parse. Read the file afterwards.
+- If a flag errors as unknown, the installed CLI is outdated: run `caesar-search update`, then retry. `caesar-search update --check --json` reports `{current, latest, update_available, channel}` without installing.
 
 ```sh
 caesar-search search "kubernetes operator patterns" --max-results 5 --format compact --json
@@ -29,6 +31,8 @@ caesar-search feedback --event-type result_helpful --search-id $SID --doc-id $DI
 | Passing a bare domain to `read` | `read` needs a full URL (`https://…`) or a `doc_id` UUID |
 | Retrying a truncated read with bigger `--max-chars` | Use `--start-char` to continue from where it stopped |
 | Parsing human output | Use `--json`; human output is not a stable interface |
+| Shell-redirecting and also reading stdout | Use `-o <file>`; it suppresses stdout so nothing competes with the file |
+| `npm update -g` / `brew upgrade` by hand | `caesar-search update` picks the right channel itself |
 | Expecting camelCase JSON | All fields are snake_case, exactly as the API returns them |
 | `caesar search` | The binary is `caesar-search` |
 

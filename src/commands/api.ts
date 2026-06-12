@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { badInput } from "../output/exit";
-import { clientFromCommand } from "./common";
+import { emitData } from "../output/render";
+import { clientFromCommand, outputOptions } from "./common";
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
@@ -36,6 +37,7 @@ Examples:
       const body = await readBody(options.input);
       const client = clientFromCommand(command);
       const { body: response } = await client.request(method, path, body);
-      process.stdout.write(`${JSON.stringify(response)}\n`);
+      // Raw API output is always JSON, with or without --json.
+      emitData(response, { ...outputOptions(command), json: true }, () => "");
     });
 }

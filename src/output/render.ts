@@ -1,7 +1,10 @@
-import { CliError } from "./exit";
+import { writeFileSync } from "node:fs";
+import { badInput, CliError } from "./exit";
 
 export interface OutputOptions {
   json: boolean;
+  /** Write data to this file and suppress stdout (errors still go to stderr). */
+  output?: string;
 }
 
 function colorEnabled(): boolean {
@@ -23,11 +26,21 @@ export function emitData(
   options: OutputOptions,
   human: (payload: unknown) => string,
 ): void {
-  if (options.json) {
-    process.stdout.write(`${JSON.stringify(payload)}\n`);
+  const text = options.json ? JSON.stringify(payload) : human(payload);
+  if (options.output) {
+    try {
+      writeFileSync(options.output, `${text}\n`);
+    } catch (error) {
+      throw badInput(
+        `could not write to ${options.output}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    // Suppress stdout so nothing competes with the file; note the path on
+    // stderr for interactive use only.
+    if (!options.json) process.stderr.write(`wrote ${options.output}\n`);
     return;
   }
-  process.stdout.write(`${human(payload)}\n`);
+  process.stdout.write(`${text}\n`);
 }
 
 export function emitError(error: unknown, json: boolean): number {

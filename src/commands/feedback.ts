@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { z } from "zod";
 import { badInput } from "../output/exit";
 import { emitData } from "../output/render";
-import { clientFromCommand, jsonMode } from "./common";
+import { clientFromCommand, outputOptions } from "./common";
 
 const EVENT_TYPES = [
   "result_helpful",
@@ -58,7 +58,7 @@ Examples:
 
       const client = clientFromCommand(command);
       const response = await client.post("/v1/feedback", body);
-      emitData(response, { json: jsonMode(command) }, (payload) => {
+      emitData(response, outputOptions(command), (payload) => {
         const accepted = (payload as { accepted?: boolean }).accepted === true;
         return accepted ? "feedback accepted" : "feedback not accepted";
       });

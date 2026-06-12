@@ -6,6 +6,7 @@ import { registerConfig } from "./commands/config";
 import { registerFeedback } from "./commands/feedback";
 import { registerRead } from "./commands/read";
 import { registerSearch } from "./commands/search";
+import { registerUpdate } from "./commands/update";
 import { EXIT_BAD_INPUT } from "./output/exit";
 import { emitData, emitError } from "./output/render";
 import { BUILD_DATE, COMMIT, VERSION } from "./version";
@@ -17,6 +18,7 @@ export function buildProgram(): Command {
     .description("CLI for the Caesar search API: web search with provenance, built for agents and scripts.")
     .version(VERSION, "-v, --version")
     .option("--json", "machine output: data on stdout, JSON error envelopes on stderr")
+    .option("-o, --output <file>", "write data output to a file and suppress stdout")
     .option("--key <key>", "API key (overrides CAESAR_API_KEY and the config file)")
     .option("--base-url <url>", "API base URL (overrides CAESAR_BASE_URL)")
     .option("--no-retry", "disable rate-limit/5xx retries")
@@ -44,6 +46,7 @@ Environment:
   registerConfig(program);
   registerApi(program);
   registerCompletion(program);
+  registerUpdate(program);
 
   program
     .command("version")

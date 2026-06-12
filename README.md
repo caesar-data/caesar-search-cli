@@ -31,10 +31,16 @@ caesar-search auth status|login|logout
 caesar-search config get|set|unset|list|path
 caesar-search api <method> <path>  authenticated raw API call (escape hatch)
 caesar-search completion bash|zsh|fish
+caesar-search update               self-update; --check reports without installing
 caesar-search version
 ```
 
-Every command supports `--json` (data on stdout, JSON error envelopes on stderr), `--key`, `--base-url`, `--no-retry`, and `--timeout <seconds>`.
+Every command supports `--json` (data on stdout, JSON error envelopes on stderr), `-o/--output <file>` (write data to a file and suppress stdout), `--key`, `--base-url`, `--no-retry`, and `--timeout <seconds>`.
+
+`update` detects how the CLI was installed — npm global, Homebrew, or the curl
+installer — and runs the matching upgrade (standalone installs replace the
+binary in place after sha256 verification). `update --check --json` reports
+`{current, latest, update_available, channel}` without changing anything.
 
 ## Exit codes
 

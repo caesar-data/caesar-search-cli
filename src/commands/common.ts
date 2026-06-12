@@ -3,8 +3,11 @@ import type { Command } from "commander";
 import { ApiClient } from "../api/client";
 import { badInput } from "../output/exit";
 
+import type { OutputOptions } from "../output/render";
+
 export interface GlobalOptions {
   json?: boolean;
+  output?: string;
   key?: string;
   baseUrl?: string;
   retry?: boolean;
@@ -27,6 +30,11 @@ export function clientFromCommand(command: Command): ApiClient {
 
 export function jsonMode(command: Command): boolean {
   return command.optsWithGlobals<GlobalOptions>().json === true;
+}
+
+export function outputOptions(command: Command): OutputOptions {
+  const options = command.optsWithGlobals<GlobalOptions>();
+  return { json: options.json === true, output: options.output };
 }
 
 export async function argOrStdin(value: string, name: string): Promise<string> {
