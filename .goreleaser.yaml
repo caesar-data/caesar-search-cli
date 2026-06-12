@@ -1,0 +1,66 @@
+version: 2
+
+project_name: caesar-search
+
+builds:
+  - id: caesar-search
+    builder: bun
+    binary: caesar-search
+    main: ./src/index.ts
+    targets:
+      - bun-darwin-x64
+      - bun-darwin-arm64
+      - bun-linux-x64
+      - bun-linux-arm64
+      - bun-windows-x64
+    flags:
+      - --compile
+      - --minify
+      - '--define=CAESAR_CLI_VERSION="{{ .Version }}"'
+      - '--define=CAESAR_CLI_COMMIT="{{ .ShortCommit }}"'
+      - '--define=CAESAR_CLI_BUILD_DATE="{{ .Date }}"'
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+homebrew_casks:
+  - name: caesar-search
+    repository:
+      owner: caesar-data
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/caesar-data/caesar-search-cli
+    description: CLI for the Caesar search API
+    license: MIT
+    commit_author:
+      name: caesar-release-bot
+      email: releases@caesar.xyz
+
+release:
+  github:
+    owner: caesar-data
+    name: caesar-search-cli
+  draft: false
+  prerelease: auto

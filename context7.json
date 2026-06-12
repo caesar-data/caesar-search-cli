@@ -1,0 +1,14 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "caesar-search CLI",
+  "description": "CLI for the Caesar search API: web search with provenance for agents and scripts",
+  "folders": [],
+  "excludeFolders": ["node_modules", "dist", "spec"],
+  "rules": [
+    "Always pass --json for machine output; parse stdout as JSON and stderr error envelopes",
+    "Branch on exit codes: 0 ok, 2 bad input, 3 auth, 4 API error, 5 timeout",
+    "The flag is --max-results (not --results or --limit); modes are fast|standard|research",
+    "Continue truncated reads with --start-char instead of increasing --max-chars",
+    "Set CAESAR_API_KEY; never paste literal keys into configs or shell history"
+  ]
+}
