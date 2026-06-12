@@ -49,6 +49,10 @@ jobs:
         with:
           node-version: 24
       - run: npm install -g npm@latest
+      - name: OIDC diagnostics
+        run: |
+          npm --version
+          env | grep -c ACTIONS_ID_TOKEN || echo "NO OIDC ENV"
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: npm publish --access public
+      - run: npm publish --access public --loglevel verbose 2>&1 | grep -viE "authtoken|password" | tail -40
