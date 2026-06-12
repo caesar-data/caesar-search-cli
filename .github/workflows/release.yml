@@ -44,10 +44,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
+      # Trusted publishing (OIDC): no token. Requires a recent npm CLI and
+      # the trusted-publisher config on npmjs.com pointing at this workflow.
+      - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --access public
