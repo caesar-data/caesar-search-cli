@@ -2,6 +2,9 @@ version: 2
 
 project_name: caesar-search
 
+# Keep release artifacts out of dist/, which is the npm package payload.
+dist: dist-release
+
 builds:
   - id: caesar-search
     builder: bun
