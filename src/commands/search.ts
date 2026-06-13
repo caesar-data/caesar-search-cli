@@ -16,7 +16,6 @@ export function registerSearch(program: Command): void {
     .argument("<query>", "search query, or - to read it from stdin")
     .option("--mode <mode>", "retrieval mode: fast | standard | research", "standard")
     .option("--max-results <n>", "number of results, 1-50", "10")
-    .option("--objective <text>", "broader task objective to steer retrieval")
     .option("--format <format>", "response detail: ids_only | compact | standard | full", "standard")
     .addHelpText(
       "after",
@@ -41,7 +40,6 @@ Examples:
         client_model: "cli",
         response: { verbosity: format.data },
       };
-      if (options.objective) body.objective = options.objective;
 
       const client = clientFromCommand(command);
       const response = await client.post("/v1/search", body);

@@ -24,7 +24,7 @@ caesar-search feedback --event-type result_helpful --doc-id <doc_id>
 ## Commands
 
 ```
-caesar-search search <query|->     web search; --mode --max-results --objective --format
+caesar-search search <query|->     web search; --mode --max-results --format
 caesar-search read <url|doc_id|->  read a page as markdown; --query --max-chars --start-char (aliases: fetch, extract)
 caesar-search feedback             send result feedback; --event-type --search-id --doc-id
 caesar-search auth status|login|logout

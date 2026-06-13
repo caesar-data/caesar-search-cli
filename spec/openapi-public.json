@@ -152,7 +152,7 @@
         "properties": {
           "format": {
             "default": "markdown",
-            "description": "Returned content format.",
+            "description": "Returned content format: markdown (default) preserves document structure (headings, lists, code blocks); text is plain text.",
             "enum": [
               "text",
               "markdown"
@@ -160,18 +160,18 @@
             "type": "string"
           },
           "include_offsets": {
-            "description": "Whether passage offsets should be included when available.",
+            "description": "When true, passages carry char_start/char_end offsets into the full extracted text when available, for character-precise citation.",
             "type": "boolean"
           },
           "max_chars": {
             "default": 12000,
-            "description": "Maximum content.text characters to return.",
+            "description": "Maximum content.text characters to return. Longer documents set content.truncated true; continue with content.range.start_char instead of retrying with a larger cap.",
             "format": "int64",
             "minimum": 1,
             "type": "integer"
           },
           "passage_ids": {
-            "description": "Passage IDs to return when selection is passage_ids.",
+            "description": "Passage identifiers to return when selection is passage_ids, from a search result's passages or a previous read.",
             "items": {
               "type": "string"
             },
@@ -186,7 +186,7 @@
           },
           "selection": {
             "default": "query_relevant",
-            "description": "Content selection strategy.",
+            "description": "How content.text is chosen: query_relevant (default) returns the passages most relevant to query; top_passages returns the document's leading passages; passage_ids returns exactly content.passage_ids; full_document returns the extracted text up to max_chars; none returns no content body.",
             "enum": [
               "none",
               "query_relevant",
@@ -215,6 +215,132 @@
         ],
         "type": "object"
       },
+      "DocumentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://search-api-staging-779189860552.europe-west1.run.app/DocumentRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "canonical_url": {
+            "description": "Canonical URL from a result's canonical_url; lookup alternative to doc_id. Either doc_id or canonical_url is required.",
+            "format": "uri",
+            "type": "string"
+          },
+          "content": {
+            "$ref": "#/components/schemas/DocumentContentRequest",
+            "description": "Controls for returned document content: selection strategy, format, size cap, and continuation range."
+          },
+          "debug": {
+            "additionalProperties": {},
+            "description": "Reserved for internal evaluation harnesses; ignored for public callers.",
+            "type": "object"
+          },
+          "doc_id": {
+            "description": "Canonical document identifier (UUID) from a search result's doc_id; stable across searches and recrawls. Either doc_id or canonical_url is required.",
+            "examples": [
+              "0c944fa8-4c8f-4f48-9b08-0fb2fd3438ec"
+            ],
+            "format": "uuid",
+            "type": "string"
+          },
+          "include": {
+            "description": "Sections to return. Omit it for everything available; otherwise an allowlist of passages, capture_history, and content (document metadata is always returned - send just metadata for a metadata-only read).",
+            "items": {
+              "enum": [
+                "metadata",
+                "passages",
+                "capture_history",
+                "content"
+              ],
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "query": {
+            "description": "Query context for passage selection: with content.selection query_relevant, content and passages are chosen for relevance to this text.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DocumentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://search-api-staging-779189860552.europe-west1.run.app/DocumentResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "capture_history": {
+            "items": {
+              "$ref": "#/components/schemas/CaptureHistoryEntry"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "content": {
+            "$ref": "#/components/schemas/DocumentContent"
+          },
+          "doc": {
+            "$ref": "#/components/schemas/Document"
+          },
+          "passages": {
+            "items": {
+              "$ref": "#/components/schemas/Passage"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/DocumentProvenance"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "request_id",
+          "session_id",
+          "access",
+          "doc"
+        ],
+        "type": "object"
+      },
       "ErrorBody": {
         "additionalProperties": false,
         "properties": {
@@ -238,6 +364,41 @@
         ],
         "type": "object"
       },
+      "ErrorEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://search-api-staging-779189860552.europe-west1.run.app/ErrorEnvelope.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody",
+            "description": "Error details."
+          },
+          "request_id": {
+            "description": "Server request identifier.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Envelope discriminator.",
+            "enum": [
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "request_id",
+          "error"
+        ],
+        "type": "object"
+      },
       "FeedbackAgentContext": {
         "additionalProperties": false,
         "properties": {
@@ -246,10 +407,121 @@
             "type": "string"
           },
           "task_type": {
-            "description": "Agent task type or evaluation bucket.",
+            "description": "Agent task type or evaluation bucket (e.g. 'coding' or 'research').",
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "FeedbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://search-api-staging-779189860552.europe-west1.run.app/FeedbackRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "agent_context": {
+            "$ref": "#/components/schemas/FeedbackAgentContext",
+            "description": "Optional calling-agent context for slicing feedback in evaluation."
+          },
+          "doc_id": {
+            "description": "Document the event concerns, from the result's doc_id.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "event_type": {
+            "description": "What happened: result_helpful / result_not_helpful (the result did or did not advance the task), passage_used (a passage was used or cited), read_abandoned (opened but abandoned), duplicate_result, stale_result (outdated content), spam_or_low_quality, missing_expected_source (a source you expected did not appear), unsafe_or_policy_issue.",
+            "enum": [
+              "result_helpful",
+              "result_not_helpful",
+              "passage_used",
+              "read_abandoned",
+              "duplicate_result",
+              "stale_result",
+              "spam_or_low_quality",
+              "missing_expected_source",
+              "unsafe_or_policy_issue"
+            ],
+            "type": "string"
+          },
+          "notes": {
+            "description": "Free-text context, recorded for human review and offline evaluation.",
+            "type": "string"
+          },
+          "passage_id": {
+            "description": "Specific passage the event concerns, from passages[].passage_id; most useful with passage_used.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "query": {
+            "description": "Query text the event relates to, useful when no search_id is available.",
+            "type": "string"
+          },
+          "rank": {
+            "description": "One-based position the result had in the ranked list.",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "search_id": {
+            "description": "The search_id returned by /v1/search. Ties feedback to the exact ranked list that produced the result, so ranking learns from the right context.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session the event belongs to (UUID), matching session_id from earlier responses.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_type"
+        ],
+        "type": "object"
+      },
+      "FeedbackResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://search-api-staging-779189860552.europe-west1.run.app/FeedbackResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "accepted": {
+            "type": "boolean"
+          },
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "feedback_id": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        },
+        "required": [
+          "request_id",
+          "feedback_id",
+          "session_id",
+          "access",
+          "accepted"
+        ],
         "type": "object"
       },
       "Passage": {
@@ -343,14 +615,14 @@
         "additionalProperties": false,
         "properties": {
           "max_chars_total": {
-            "description": "Maximum serialized response size in characters. Roughly 4 characters per token.",
+            "description": "Maximum serialized response size in characters (roughly 4 characters per token, so 2000 is about 500 tokens).",
             "format": "int64",
             "minimum": 1,
             "type": "integer"
           },
           "on_exceed": {
             "default": "shed",
-            "description": "What to do when the budget binds: shed payload in the documented order, or fail with response_too_large.",
+            "description": "What to do when the budget binds: shed (default) trims in a fixed order - passages, snippet tails, preset extras, then tail results, never below one result - and sets truncated plus a response_truncated warning; error fails with response_too_large instead.",
             "enum": [
               "shed",
               "error"
@@ -379,6 +651,148 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "SearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://search-api-staging-779189860552.europe-west1.run.app/SearchRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "client_model": {
+            "description": "Calling model identifier, recorded for analytics and ranking tuning.",
+            "type": "string"
+          },
+          "filters": {
+            "additionalProperties": {},
+            "description": "Structured filters. Keys: country (two-letter code such as 'us' or 'de', scoping results to a market), language (two-letter code such as 'en'), exact_match (boolean; quotes the query so the index matches it verbatim).",
+            "type": "object"
+          },
+          "freshness_policy": {
+            "additionalProperties": {},
+            "description": "Recency requirements. Keys: published_after (RFC 3339 timestamp or YYYY-MM-DD date; only content published after it) and freshness (coarse window code pd, pw, pm, or py for past day, week, month, or year; ignored when published_after is set).",
+            "type": "object"
+          },
+          "max_results": {
+            "default": 10,
+            "description": "Maximum number of ranked results to return. The response carries fewer when the index has fewer matches.",
+            "format": "int64",
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "mode": {
+            "default": "standard",
+            "description": "Retrieval budget and ranking mode: fast skips the reranking stage for the lowest latency; standard (default) and research rerank results, with research spending the largest retrieval budget.",
+            "enum": [
+              "fast",
+              "standard",
+              "research"
+            ],
+            "type": "string"
+          },
+          "query": {
+            "description": "The search query, phrased as the user or agent would ask it. Drives ranking and passage selection even when search_queries supplies a rewrite.",
+            "examples": [
+              "linux kernel amd gpu suspend"
+            ],
+            "minLength": 1,
+            "type": "string"
+          },
+          "response": {
+            "$ref": "#/components/schemas/ResponseShape",
+            "description": "Optional response shaping: verbosity preset and serialized-size budget."
+          },
+          "search_queries": {
+            "description": "Caller-provided query rewrites. The first entry replaces query as the text sent to the search index; query still drives reranking and passage selection. All entries are visible to the server-side query rewriter.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "session_id": {
+            "description": "Client session identifier (UUID). Groups related search, document, and feedback calls; equivalent to the X-Session-ID header. When omitted, the server generates one and echoes it back as session_id.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "source_policy": {
+            "additionalProperties": {},
+            "description": "Domain allow/deny policy. Keys: include_domains (array of domains; with require_domain_match true, results outside them are dropped, and a single entry is also sent to the index as a site: operator), exclude_domains (array of domains whose results are always dropped), require_domain_match (boolean). Domains match their subdomains; a leading www. is ignored.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "SearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://search-api-staging-779189860552.europe-west1.run.app/SearchResponse.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "ranking": {
+            "$ref": "#/components/schemas/Ranking"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "search_id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "request_id",
+          "search_id",
+          "session_id",
+          "results"
+        ],
         "type": "object"
       },
       "SearchResult": {
@@ -530,6 +944,7 @@
   "paths": {
     "/v1/document": {
       "post": {
+        "description": "Inspect one canonical document and retrieve selected content.",
         "operationId": "get-document",
         "parameters": [
           {
@@ -546,52 +961,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "canonical_url": {
-                    "description": "Canonical URL lookup key. Either doc_id or canonical_url is required.",
-                    "format": "uri",
-                    "type": "string"
-                  },
-                  "content": {
-                    "$ref": "#/components/schemas/DocumentContentRequest",
-                    "description": "Controls for returned document content."
-                  },
-                  "debug": {
-                    "additionalProperties": {},
-                    "description": "Optional debug controls for internal evaluation.",
-                    "type": "object"
-                  },
-                  "doc_id": {
-                    "description": "Canonical document identifier. Either doc_id or canonical_url is required.",
-                    "examples": [
-                      "0c944fa8-4c8f-4f48-9b08-0fb2fd3438ec"
-                    ],
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  "include": {
-                    "description": "Optional document sections to include.",
-                    "items": {
-                      "enum": [
-                        "metadata",
-                        "passages",
-                        "capture_history",
-                        "content"
-                      ],
-                      "type": "string"
-                    },
-                    "type": [
-                      "array",
-                      "null"
-                    ]
-                  },
-                  "query": {
-                    "description": "Optional query context for passage selection.",
-                    "type": "string"
-                  }
-                },
-                "type": "object"
+                "$ref": "#/components/schemas/DocumentRequest"
               }
             }
           },
@@ -602,64 +972,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "access": {
-                      "$ref": "#/components/schemas/Access"
-                    },
-                    "capture_history": {
-                      "items": {
-                        "$ref": "#/components/schemas/CaptureHistoryEntry"
-                      },
-                      "type": [
-                        "array",
-                        "null"
-                      ]
-                    },
-                    "content": {
-                      "$ref": "#/components/schemas/DocumentContent"
-                    },
-                    "doc": {
-                      "$ref": "#/components/schemas/Document"
-                    },
-                    "passages": {
-                      "items": {
-                        "$ref": "#/components/schemas/Passage"
-                      },
-                      "type": [
-                        "array",
-                        "null"
-                      ]
-                    },
-                    "provenance": {
-                      "$ref": "#/components/schemas/DocumentProvenance"
-                    },
-                    "request_id": {
-                      "type": "string"
-                    },
-                    "session_id": {
-                      "type": "string"
-                    },
-                    "usage": {
-                      "$ref": "#/components/schemas/Usage"
-                    },
-                    "warnings": {
-                      "items": {
-                        "$ref": "#/components/schemas/Warning"
-                      },
-                      "type": [
-                        "array",
-                        "null"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "request_id",
-                    "session_id",
-                    "access",
-                    "doc"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/DocumentResponse"
                 }
               }
             },
@@ -669,30 +982,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -702,30 +992,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -735,30 +1002,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -768,63 +1012,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
-            "description": "Document or passage not found."
+            "description": "Document not found."
           },
           "429": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -834,34 +1032,31 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
             "description": "Internal error."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Search infrastructure unreachable."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Search infrastructure unavailable."
           }
         },
         "security": [
@@ -869,7 +1064,7 @@
             "bearerApiKey": []
           }
         ],
-        "summary": "Inspect one canonical document and retrieve selected content.",
+        "summary": "Get a document",
         "tags": [
           "Documents"
         ],
@@ -878,6 +1073,7 @@
     },
     "/v1/feedback": {
       "post": {
+        "description": "Persist an agent or evaluation feedback event.",
         "operationId": "record-feedback",
         "parameters": [
           {
@@ -894,66 +1090,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "agent_context": {
-                    "$ref": "#/components/schemas/FeedbackAgentContext",
-                    "description": "Optional calling-agent context."
-                  },
-                  "doc_id": {
-                    "description": "Document associated with the feedback event.",
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  "event_type": {
-                    "description": "Feedback event classification.",
-                    "enum": [
-                      "result_helpful",
-                      "result_not_helpful",
-                      "passage_used",
-                      "read_abandoned",
-                      "duplicate_result",
-                      "stale_result",
-                      "spam_or_low_quality",
-                      "missing_expected_source",
-                      "unsafe_or_policy_issue"
-                    ],
-                    "type": "string"
-                  },
-                  "notes": {
-                    "description": "Optional notes for human review or offline evaluation.",
-                    "type": "string"
-                  },
-                  "passage_id": {
-                    "description": "Passage associated with the feedback event.",
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  "query": {
-                    "description": "Query associated with the feedback event.",
-                    "type": "string"
-                  },
-                  "rank": {
-                    "description": "One-based result rank, when applicable.",
-                    "format": "int64",
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "search_id": {
-                    "description": "Search request identifier returned by /v1/search.",
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  "session_id": {
-                    "description": "Optional client session identifier.",
-                    "format": "uuid",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "event_type"
-                ],
-                "type": "object"
+                "$ref": "#/components/schemas/FeedbackRequest"
               }
             }
           },
@@ -964,35 +1101,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "accepted": {
-                      "type": "boolean"
-                    },
-                    "access": {
-                      "$ref": "#/components/schemas/Access"
-                    },
-                    "feedback_id": {
-                      "type": "string"
-                    },
-                    "request_id": {
-                      "type": "string"
-                    },
-                    "session_id": {
-                      "type": "string"
-                    },
-                    "usage": {
-                      "$ref": "#/components/schemas/Usage"
-                    }
-                  },
-                  "required": [
-                    "request_id",
-                    "feedback_id",
-                    "session_id",
-                    "access",
-                    "accepted"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/FeedbackResponse"
                 }
               }
             },
@@ -1002,30 +1111,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1035,30 +1121,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1068,30 +1131,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1101,30 +1141,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1134,30 +1151,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1167,30 +1161,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1202,7 +1173,7 @@
             "bearerApiKey": []
           }
         ],
-        "summary": "Persist an agent or evaluation feedback event.",
+        "summary": "Record feedback",
         "tags": [
           "Feedback"
         ],
@@ -1211,6 +1182,7 @@
     },
     "/v1/search": {
       "post": {
+        "description": "Run ranked retrieval over canonical documents and passages.",
         "operationId": "search",
         "parameters": [
           {
@@ -1227,91 +1199,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "client_model": {
-                    "description": "Optional calling model identifier for analytics and tuning.",
-                    "type": "string"
-                  },
-                  "content": {
-                    "additionalProperties": {},
-                    "description": "Optional content-return controls.",
-                    "type": "object"
-                  },
-                  "debug": {
-                    "additionalProperties": {},
-                    "description": "Optional debug controls for internal evaluation.",
-                    "type": "object"
-                  },
-                  "filters": {
-                    "additionalProperties": {},
-                    "description": "Optional structured filters.",
-                    "type": "object"
-                  },
-                  "freshness_policy": {
-                    "additionalProperties": {},
-                    "description": "Optional freshness requirements for time-sensitive queries.",
-                    "type": "object"
-                  },
-                  "max_results": {
-                    "default": 10,
-                    "description": "Maximum number of ranked results to return.",
-                    "format": "int64",
-                    "maximum": 50,
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "mode": {
-                    "default": "standard",
-                    "description": "Retrieval budget and ranking mode.",
-                    "enum": [
-                      "fast",
-                      "standard",
-                      "research"
-                    ],
-                    "type": "string"
-                  },
-                  "objective": {
-                    "description": "Optional task objective used by agents to shape retrieval.",
-                    "type": "string"
-                  },
-                  "query": {
-                    "description": "Original user or agent query.",
-                    "examples": [
-                      "linux kernel amd gpu suspend"
-                    ],
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "response": {
-                    "$ref": "#/components/schemas/ResponseShape",
-                    "description": "Optional response shaping: verbosity preset and serialized-size budget."
-                  },
-                  "search_queries": {
-                    "description": "Optional caller-provided query rewrites.",
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": [
-                      "array",
-                      "null"
-                    ]
-                  },
-                  "session_id": {
-                    "description": "Optional client session identifier.",
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  "source_policy": {
-                    "additionalProperties": {},
-                    "description": "Optional source inclusion and exclusion policy.",
-                    "type": "object"
-                  }
-                },
-                "required": [
-                  "query"
-                ],
-                "type": "object"
+                "$ref": "#/components/schemas/SearchRequest"
               }
             }
           },
@@ -1322,55 +1210,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "access": {
-                      "$ref": "#/components/schemas/Access"
-                    },
-                    "ranking": {
-                      "$ref": "#/components/schemas/Ranking"
-                    },
-                    "request_id": {
-                      "type": "string"
-                    },
-                    "results": {
-                      "items": {
-                        "$ref": "#/components/schemas/SearchResult"
-                      },
-                      "type": [
-                        "array",
-                        "null"
-                      ]
-                    },
-                    "search_id": {
-                      "type": "string"
-                    },
-                    "session_id": {
-                      "type": "string"
-                    },
-                    "truncated": {
-                      "type": "boolean"
-                    },
-                    "usage": {
-                      "$ref": "#/components/schemas/Usage"
-                    },
-                    "warnings": {
-                      "items": {
-                        "$ref": "#/components/schemas/Warning"
-                      },
-                      "type": [
-                        "array",
-                        "null"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "request_id",
-                    "search_id",
-                    "session_id",
-                    "results"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/SearchResponse"
                 }
               }
             },
@@ -1380,30 +1220,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1413,30 +1230,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1446,30 +1240,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1479,30 +1250,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
@@ -1512,34 +1260,31 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/ErrorBody",
-                      "description": "Error details."
-                    },
-                    "request_id": {
-                      "description": "Server request identifier.",
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "Envelope discriminator.",
-                      "enum": [
-                        "error"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "request_id",
-                    "error"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
             "description": "Internal error."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Search infrastructure unreachable."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Search infrastructure unavailable."
           }
         },
         "security": [
@@ -1547,7 +1292,7 @@
             "bearerApiKey": []
           }
         ],
-        "summary": "Run ranked retrieval over canonical documents and passages.",
+        "summary": "Search",
         "tags": [
           "Search"
         ],
@@ -1557,6 +1302,11 @@
   },
   "servers": [
     {
+      "description": "Staging",
+      "url": "https://search-api-staging-779189860552.europe-west1.run.app"
+    },
+    {
+      "description": "Local development",
       "url": "http://localhost:8080"
     }
   ],
