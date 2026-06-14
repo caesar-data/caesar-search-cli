@@ -450,6 +450,8 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                /** @description Optional bearer token for keyed access. Omit this header for anonymous access. */
+                Authorization?: string;
                 /** @description Optional client session identifier. */
                 "X-Session-ID"?: string;
             };
@@ -549,6 +551,8 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                /** @description Optional bearer token for keyed access. Omit this header for anonymous access. */
+                Authorization?: string;
                 /** @description Optional client session identifier. */
                 "X-Session-ID"?: string;
             };
@@ -630,6 +634,8 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                /** @description Optional bearer token for keyed access. Omit this header for anonymous access. */
+                Authorization?: string;
                 /** @description Optional client session identifier. */
                 "X-Session-ID"?: string;
             };
