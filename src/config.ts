@@ -7,7 +7,7 @@ export interface CliConfig {
   base_url?: string;
 }
 
-export const DEFAULT_BASE_URL = "https://search-api-staging-779189860552.europe-west1.run.app";
+export const DEFAULT_BASE_URL = "https://alpha.api.trycaesar.com";
 
 export function configPath(): string {
   const xdg = process.env.XDG_CONFIG_HOME;

@@ -149,7 +149,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://search-api-staging-779189860552.europe-west1.run.app/DocumentRequest.json
+             * @example https://alpha.api.trycaesar.com/DocumentRequest.json
              */
             readonly $schema?: string;
             /**
@@ -178,7 +178,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://search-api-staging-779189860552.europe-west1.run.app/DocumentResponse.json
+             * @example https://alpha.api.trycaesar.com/DocumentResponse.json
              */
             readonly $schema?: string;
             access: components["schemas"]["Access"];
@@ -206,7 +206,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://search-api-staging-779189860552.europe-west1.run.app/ErrorEnvelope.json
+             * @example https://alpha.api.trycaesar.com/ErrorEnvelope.json
              */
             readonly $schema?: string;
             /** @description Error details. */
@@ -229,7 +229,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://search-api-staging-779189860552.europe-west1.run.app/FeedbackRequest.json
+             * @example https://alpha.api.trycaesar.com/FeedbackRequest.json
              */
             readonly $schema?: string;
             /** @description Optional calling-agent context for slicing feedback in evaluation. */
@@ -273,7 +273,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://search-api-staging-779189860552.europe-west1.run.app/FeedbackResponse.json
+             * @example https://alpha.api.trycaesar.com/FeedbackResponse.json
              */
             readonly $schema?: string;
             accepted: boolean;
@@ -335,7 +335,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://search-api-staging-779189860552.europe-west1.run.app/SearchRequest.json
+             * @example https://alpha.api.trycaesar.com/SearchRequest.json
              */
             readonly $schema?: string;
             /** @description Calling model identifier, recorded for analytics and ranking tuning. */
@@ -383,7 +383,7 @@ export interface components {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://search-api-staging-779189860552.europe-west1.run.app/SearchResponse.json
+             * @example https://alpha.api.trycaesar.com/SearchResponse.json
              */
             readonly $schema?: string;
             access?: components["schemas"]["Access"];
