@@ -480,7 +480,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Missing or invalid API key. */
+            /** @description Invalid API key, or missing API key when keyless access is disabled. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -579,7 +579,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Missing or invalid API key. */
+            /** @description Invalid API key, or missing API key when keyless access is disabled. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -660,7 +660,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Missing or invalid API key. */
+            /** @description Invalid API key, or missing API key when keyless access is disabled. */
             401: {
                 headers: {
                     [name: string]: unknown;
