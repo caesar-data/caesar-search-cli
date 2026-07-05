@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { classifyTarget, detectChrome, isRequestPermitted, renderLocally } from "../src/render/index";
+import {
+  classifyTarget,
+  detectChrome,
+  type HostVerdict,
+  isRequestPermitted,
+  renderLocally,
+} from "../src/render/index";
 import { mockServer, runCli } from "./helpers";
 
 const DOC_ID = "0c944fa8-4c8f-4f48-9b08-0fb2fd3438ec";
@@ -233,6 +239,59 @@ describe("local render tier", () => {
     expect(codes).not.toContain("local_render");
   });
 
+  test("--start-char continuation stays local with offsets into the same extraction", async () => {
+    const server = mockServer(() => ({
+      body: { doc: { doc_id: DOC_ID, title: "T" }, content: { text: "server body" } },
+    }));
+    const longMarkdown = `${RICH_MARKDOWN}\n\n${"More prose to page through. ".repeat(80)}`;
+    const fixture = writeFixture({ markdown: longMarkdown, title: "T", textLength: 2000 });
+
+    const result = await runCli(
+      [
+        "read",
+        URL,
+        "--json",
+        "--start-char",
+        "40",
+        "--max-chars",
+        "25",
+        "--base-url",
+        server.url,
+        "--key",
+        "test",
+      ],
+      { env: { CAESAR_LOCAL_RENDER_FIXTURE: fixture } },
+    );
+    server.stop();
+
+    expect(result.code).toBe(0);
+    // The continuation is a local re-render, not a paid server read.
+    expect(server.calls.length).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    // Offsets index the SAME markdown the truncated read came from.
+    expect(payload.content.text).toBe(longMarkdown.slice(40, 65));
+    expect(payload.content.start_char).toBe(40);
+    expect(payload.content.char_count).toBe(25);
+    expect(payload.content.truncated).toBe(true);
+    expect((payload.warnings as { code?: string }[]).map((w) => w.code)).toContain("local_render");
+  });
+
+  test("--start-char past the end of a local render returns an empty, non-truncated tail", async () => {
+    const server = mockServer(() => ({ body: metadataDoc }));
+    const fixture = writeFixture({ markdown: RICH_MARKDOWN, title: "T", textLength: 1200 });
+    const result = await runCli(
+      ["read", URL, "--json", "--start-char", "100000", "--base-url", server.url, "--key", "test"],
+      { env: { CAESAR_LOCAL_RENDER_FIXTURE: fixture } },
+    );
+    server.stop();
+    expect(result.code).toBe(0);
+    expect(server.calls.length).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.content.text).toBe("");
+    expect(payload.content.char_count).toBe(0);
+    expect(payload.content.truncated).toBe(false);
+  });
+
   test("doc_id input never renders locally", async () => {
     const server = mockServer(() => ({
       body: { doc: { doc_id: DOC_ID }, content: { text: "server body" } },
@@ -397,11 +456,11 @@ describe("doctor", () => {
   test("reports browser, local render (via fixture), and server reachability", async () => {
     const server = mockServer(() => ({ body: { ok: true } }));
     const fixture = writeFixture({ markdown: RICH_MARKDOWN, title: "T", textLength: 1200 });
-    // A fake CHROME_PATH keeps the browser check hermetic; version probing on a
-    // non-executable file simply yields no version.
+    // A fake CHROME_PATH keeps the browser check hermetic. It must be an
+    // executable regular file: detection rejects anything spawn() couldn't run.
     const dir = mkdtempSync(join(tmpdir(), "caesar-doctor-"));
     const fakeChrome = join(dir, "chrome");
-    writeFileSync(fakeChrome, "#!/bin/sh\n");
+    writeFileSync(fakeChrome, "#!/bin/sh\n", { mode: 0o755 });
 
     const result = await runCli(["doctor", "--json", "--base-url", server.url, "--key", "test"], {
       env: { CAESAR_LOCAL_RENDER_FIXTURE: fixture, CHROME_PATH: fakeChrome },
@@ -436,10 +495,10 @@ describe("doctor", () => {
 });
 
 describe("detectChrome", () => {
-  test("honors CHROME_PATH when it points at an existing file", () => {
+  test("honors CHROME_PATH when it points at an executable file", () => {
     const dir = mkdtempSync(join(tmpdir(), "caesar-chrome-"));
     const fake = join(dir, "chrome");
-    writeFileSync(fake, "#!/bin/sh\n");
+    writeFileSync(fake, "#!/bin/sh\n", { mode: 0o755 });
     const previous = process.env.CHROME_PATH;
     try {
       process.env.CHROME_PATH = fake;
@@ -451,6 +510,54 @@ describe("detectChrome", () => {
     } finally {
       if (previous === undefined) delete process.env.CHROME_PATH;
       else process.env.CHROME_PATH = previous;
+    }
+  });
+
+  test("rejects a CHROME_PATH that spawn() could not run (directory, no exec bit)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "caesar-chrome-"));
+    const plain = join(dir, "not-executable");
+    writeFileSync(plain, "just text\n"); // no exec bit
+    const previous = process.env.CHROME_PATH;
+    try {
+      // A directory used to pass the existsSync check and then crash the process
+      // via spawn's unhandled async 'error' event.
+      process.env.CHROME_PATH = dir;
+      expect(detectChrome()).not.toBe(dir);
+
+      process.env.CHROME_PATH = plain;
+      expect(detectChrome()).not.toBe(plain);
+    } finally {
+      if (previous === undefined) delete process.env.CHROME_PATH;
+      else process.env.CHROME_PATH = previous;
+    }
+  });
+});
+
+describe("browser launch failures", () => {
+  // /bin/false is an executable that exits immediately without ever writing the
+  // DevToolsActivePort file. The exit-aware port poll must fail the launch in one
+  // tick — a clean fallback result, fast — instead of burning the whole 8s poll.
+  test("a binary that exits immediately fails fast with a fallback-eligible reason", async () => {
+    const previous = process.env.CHROME_PATH;
+    const previousFixture = process.env.CAESAR_LOCAL_RENDER_FIXTURE;
+    delete process.env.CAESAR_LOCAL_RENDER_FIXTURE;
+    process.env.CHROME_PATH = "/bin/false";
+    try {
+      const started = Date.now();
+      // .invalid host: the concurrent raw-baseline fetch fails DNS without any
+      // egress, and the spawn fails before the URL is ever navigated.
+      const result = await renderLocally("https://caesar-launch-test.invalid/", { maxChars: 1000 });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        // Never blocked_address or challenge: this failure must reach the server
+        // fallback in read.ts.
+        expect(["sandbox_unavailable", "browser_launch_failed", "render_failed"]).toContain(result.reason);
+      }
+      expect(Date.now() - started).toBeLessThan(5000);
+    } finally {
+      if (previous === undefined) delete process.env.CHROME_PATH;
+      else process.env.CHROME_PATH = previous;
+      if (previousFixture !== undefined) process.env.CAESAR_LOCAL_RENDER_FIXTURE = previousFixture;
     }
   });
 });
@@ -523,6 +630,58 @@ describe("real chrome render (opt-in)", () => {
       if (previousFixture !== undefined) process.env.CAESAR_LOCAL_RENDER_FIXTURE = previousFixture;
     }
   });
+
+  test.skipIf(!RUN_REAL)("an iframe to a dead host does not block the main page render", async () => {
+    const previousFixture = process.env.CAESAR_LOCAL_RENDER_FIXTURE;
+    delete process.env.CAESAR_LOCAL_RENDER_FIXTURE;
+    // Old embed-heavy pages routinely carry iframes to dead ad/tracker domains.
+    // The frame's request is denied (DNS fails closed), but only MAIN-frame
+    // navigations may fail the render — the article must still come back.
+    const paragraph = "Genuine article prose that must survive a dead embedded frame. ".repeat(20);
+    const html =
+      `<html><head><title>With Iframe</title></head><body><main><h1>With Iframe</h1>` +
+      `<p>${paragraph}</p></main><iframe src="http://caesar-dead-embed.invalid/ad"></iframe></body></html>`;
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: () => new Response(html, { headers: { "content-type": "text/html" } }),
+    });
+    try {
+      const rendered = await renderLocally(`http://127.0.0.1:${server.port}/`, {
+        maxChars: 12000,
+        allowLocalAddresses: true,
+        allowUnsandboxed: true,
+      });
+      expect(rendered.ok).toBe(true);
+      if (rendered.ok) expect(rendered.markdown).toContain("Genuine article prose");
+    } finally {
+      server.stop(true);
+      if (previousFixture !== undefined) process.env.CAESAR_LOCAL_RENDER_FIXTURE = previousFixture;
+    }
+  });
+
+  test.skipIf(!RUN_REAL)(
+    "an unresolvable main-frame host fails fast as render_failed, not blocked_address",
+    async () => {
+      const previousFixture = process.env.CAESAR_LOCAL_RENDER_FIXTURE;
+      delete process.env.CAESAR_LOCAL_RENDER_FIXTURE;
+      try {
+        const started = Date.now();
+        // DNS failure is environmental: the server resolves independently, so the
+        // reason must stay fallback-eligible (render_failed), never the
+        // no-fallback blocked_address — and it must not burn the whole deadline.
+        const rendered = await renderLocally("http://caesar-no-such-host.invalid/", {
+          maxChars: 1000,
+          allowUnsandboxed: true,
+        });
+        expect(rendered.ok).toBe(false);
+        if (!rendered.ok) expect(rendered.reason).toBe("render_failed");
+        expect(Date.now() - started).toBeLessThan(10_000);
+      } finally {
+        if (previousFixture !== undefined) process.env.CAESAR_LOCAL_RENDER_FIXTURE = previousFixture;
+      }
+    },
+  );
 });
 
 describe("url trust boundary", () => {
@@ -690,7 +849,7 @@ describe("url trust boundary", () => {
   });
 
   test("isRequestPermitted: schemes, literal hosts, and the local opt-in", async () => {
-    const cache = () => new Map<string, Promise<boolean>>();
+    const cache = () => new Map<string, Promise<HostVerdict>>();
     // Non-network schemes never egress → always allowed.
     expect(await isRequestPermitted("data:text/html,<b>x</b>", false, cache())).toBe(true);
     expect(await isRequestPermitted("about:blank", false, cache())).toBe(true);

@@ -88,12 +88,17 @@ async function checkServer(baseUrl: string): Promise<ServerReport> {
 
 function renderHint(reason: string | undefined): string | undefined {
   if (reason === "no_local_chrome") return "Install Chrome/Chromium/Edge/Brave, or set CHROME_PATH.";
+  if (reason === "browser_launch_failed") {
+    return "The detected browser binary could not be started; check that CHROME_PATH points at a runnable Chromium-family browser.";
+  }
   if (reason === "sandbox_unavailable") {
-    return (
-      "The Chrome sandbox cannot launch here (container/root?). Set " +
-      "CAESAR_ALLOW_UNSANDBOXED_RENDER=1 and pass --allow-unsandboxed-render to read, " +
-      "or reads will use the server."
-    );
+    // The env var alone is NOT enough for a plain read: each read also needs the
+    // --allow-unsandboxed-render flag, so say exactly which half is missing.
+    return isUnsandboxedRenderAllowed()
+      ? "The Chrome sandbox cannot launch here. CAESAR_ALLOW_UNSANDBOXED_RENDER is set, but a plain read also " +
+          "needs the --allow-unsandboxed-render flag; without it every read falls back to the server."
+      : "The Chrome sandbox cannot launch here (container/root?). Set CAESAR_ALLOW_UNSANDBOXED_RENDER=1 and " +
+          "pass --allow-unsandboxed-render to read, or reads will use the server.";
   }
   return undefined;
 }
@@ -145,13 +150,11 @@ export function registerDoctor(program: Command): void {
         ? { found: true, path: chrome, version: (await browserVersion(chrome)) ?? undefined }
         : { found: false, hint: "Install Chrome/Chromium/Edge/Brave, or set CHROME_PATH." };
 
-      // Run the same code path a plain `read <url>` takes (fixture seam included),
-      // honoring the env half of the unsandboxed opt-in.
+      // Probe exactly what a plain `read <url>` does (fixture seam included): no
+      // --allow-unsandboxed-render flag, so the env var alone must not make this
+      // probe pass on a host where every flagless read would hit the server.
       const startedAt = Date.now();
-      const rendered = await renderLocally(CANARY_URL, {
-        maxChars: 4000,
-        allowUnsandboxed: isUnsandboxedRenderAllowed(),
-      });
+      const rendered = await renderLocally(CANARY_URL, { maxChars: 4000 });
       const elapsedMs = Date.now() - startedAt;
       const localRender: RenderReport = rendered.ok
         ? {

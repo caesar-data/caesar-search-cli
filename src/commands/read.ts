@@ -172,15 +172,17 @@ Examples:
       }
 
       // Render with the user's own Chrome only for a plain URL read: a full
-      // document, from the start, with no query-relevance selection. doc_id,
-      // --query, and continuation reads all need server-side selection, so we
-      // record why local render was skipped rather than silently going remote.
+      // document with no query-relevance selection. doc_id and --query reads
+      // need server-side selection, so we record why local render was skipped
+      // rather than silently going remote. A --start-char continuation of a URL
+      // read stays LOCAL: it re-renders and slices the same extraction, so its
+      // offsets are consistent with the read that reported truncated:true —
+      // server offsets index a different extraction and must never be mixed in.
       // An unparseable URL can't be validated for local render either, so it
       // routes to the server (which owns URL normalization).
       let skipReason: string | null = null;
       if (isDocID) skipReason = "doc_id input";
       else if (options.query) skipReason = "query selection";
-      else if (startChar > 0) skipReason = "continuation (--start-char)";
       else if (options.localRender === false) skipReason = "--no-local-render";
       else if (classified?.kind === "unparseable") skipReason = "unvalidated URL";
       // passages and capture_history are server-side artifacts a local render
@@ -196,7 +198,10 @@ Examples:
         if (local.ok) {
           vlog(verbose, `local render → USED (${local.strategy}, ${elapsedMs}ms, ${local.textLength} chars)`);
           // Local render succeeded: return it directly, no server round-trip.
-          const text = local.markdown.slice(0, maxChars);
+          // Continuations slice the same extraction at the requested offset, so
+          // --start-char paging over local reads is offset-consistent (modulo the
+          // page itself changing between renders).
+          const text = local.markdown.slice(startChar, startChar + maxChars);
           const composed = localEnvelope(
             includeSet,
             { canonical_url: local.finalUrl || target, title: local.title },
@@ -205,8 +210,8 @@ Examples:
               format: "markdown",
               text,
               char_count: text.length,
-              truncated: local.markdown.length > maxChars,
-              start_char: 0,
+              truncated: startChar + text.length < local.markdown.length,
+              start_char: startChar,
             },
             {
               code: "local_render",
@@ -265,15 +270,19 @@ Examples:
         vlog(verbose, `local render → FALLBACK: ${local.reason} → server`);
         await serverRead(actionCommand, body, {
           code: "local_render_fallback",
-          message: `local render unavailable (${local.reason}); fetched from server`,
+          message:
+            `local render unavailable (${local.reason}); fetched from server` +
+            (startChar > 0
+              ? "; server character offsets index a different extraction and may not align with a previous local read"
+              : ""),
         });
         return;
       }
 
       // A local/internal address reaches here only via a server-only feature
-      // (--query, --start-char, --include passages/capture_history,
-      // --no-local-render). The server can't reach the user's own network, so
-      // rather than send it a private URL, reject with a clear reason.
+      // (--query, --include passages/capture_history, --no-local-render). The
+      // server can't reach the user's own network, so rather than send it a
+      // private URL, reject with a clear reason.
       if (isLocalAddress) {
         throw badInput(
           `"${classified?.url.hostname ?? target}" is a local/internal address; ${skipReason} requires the ` +

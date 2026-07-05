@@ -1,6 +1,14 @@
 import { spawn } from "node:child_process";
 import { lookup } from "node:dns/promises";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  accessSync,
+  existsSync,
+  constants as fsConstants,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 // Mozilla Readability's source, inlined as text at build time via bun's
@@ -76,11 +84,25 @@ function pathCandidates(): string[] {
   return out;
 }
 
+// A usable browser binary is a regular file with the execute bit. A bare
+// existsSync accepted directories and non-executable files, whose spawn then
+// failed asynchronously — an unhandled 'error' event that crashed the process
+// under node before any fallback could run.
+function isExecutableFile(path: string): boolean {
+  try {
+    if (!statSync(path).isFile()) return false;
+    accessSync(path, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function detectChrome(): string | null {
   const fromEnv = process.env.CHROME_PATH;
-  if (fromEnv && existsSync(fromEnv)) return fromEnv;
+  if (fromEnv && isExecutableFile(fromEnv)) return fromEnv;
   for (const candidate of [...CHROME_CANDIDATES, ...pathCandidates(), ...flatpakCandidates()]) {
-    if (existsSync(candidate)) return candidate;
+    if (isExecutableFile(candidate)) return candidate;
   }
   return null;
 }
@@ -179,29 +201,47 @@ function isIpLiteral(host: string): boolean {
   return parseDottedQuad(host) !== null;
 }
 
-// Resolve a hostname and decide whether connecting to it is permitted: refuse if
-// ANY resolved address is private/local (unless the caller opted in). Fails
-// closed on resolution error. Closes public-name → private-IP (split-horizon /
-// DNS rebinding), modulo the sub-second TOCTOU where the browser re-resolves to
-// a different address than this check saw — a documented residual.
-async function resolveHostAllowed(host: string, allowLocal: boolean): Promise<boolean> {
+// Why a request was (dis)allowed, not just whether. "blocked" is a policy verdict
+// (private/local target, forbidden scheme) that must never be retried via the
+// server; "unresolvable" is an environmental one (DNS failed HERE) that the
+// server may well succeed at, so it stays eligible for the paid fallback.
+export type HostVerdict = "ok" | "blocked" | "unresolvable";
+
+// Resolve a hostname and classify connecting to it: "blocked" if ANY resolved
+// address is private/local (unless the caller opted in), "unresolvable" on any
+// lookup failure. Closes public-name → private-IP (split-horizon / DNS
+// rebinding), modulo the sub-second TOCTOU where the browser re-resolves to a
+// different address than this check saw — a documented residual.
+async function resolveHostVerdict(host: string, allowLocal: boolean): Promise<HostVerdict> {
   try {
     const addrs = await lookup(host, { all: true });
-    if (addrs.length === 0) return false;
+    if (addrs.length === 0) return "unresolvable";
     for (const a of addrs) {
-      if (isPrivateOrLocalHost(a.address.toLowerCase())) return allowLocal;
+      if (isPrivateOrLocalHost(a.address.toLowerCase())) return allowLocal ? "ok" : "blocked";
     }
-    return true;
+    return "ok";
   } catch {
-    return false;
+    return "unresolvable";
   }
 }
 
-// Thrown when the render's navigation was aborted because a request (initial URL,
-// a redirect hop, or the main document) targeted a blocked private/local address.
-// Distinct from a generic render failure so the caller refuses to hand the same
-// URL to the server, which would just re-follow it.
+// Thrown when the render's navigation was aborted because the MAIN frame (initial
+// URL or a redirect hop) targeted a blocked private/local address. Distinct from
+// a generic render failure so the caller refuses to hand the same URL to the
+// server, which would just re-follow it.
 class BlockedRequestError extends Error {}
+
+// Internal signal that the MAIN document's navigation was denied, carrying why:
+// "blocked" (policy: private/local target — never handed to the server) or
+// "unresolvable" (environmental: DNS failed here — the server resolves
+// independently, so the read stays eligible for the paid fallback).
+class MainDocDeniedError extends Error {
+  readonly verdict: HostVerdict;
+  constructor(verdict: HostVerdict) {
+    super(`main document navigation denied: ${verdict}`);
+    this.verdict = verdict;
+  }
+}
 
 // Gate for an in-flight browser or raw request — applied to the main frame, every
 // redirect hop, and every subresource via CDP Fetch interception. Non-network
@@ -210,30 +250,38 @@ class BlockedRequestError extends Error {}
 // (via classifyTarget) AND for a hostname that RESOLVES to one, which the
 // literal-URL check at the CLI boundary cannot see. `dnsCache` memoizes verdicts
 // so the many subresources of one host resolve only once per render.
-export async function isRequestPermitted(
+export async function assessRequest(
   reqUrl: string,
   allowLocal: boolean,
-  dnsCache: Map<string, Promise<boolean>>,
-): Promise<boolean> {
+  dnsCache: Map<string, Promise<HostVerdict>>,
+): Promise<HostVerdict> {
   let u: URL;
   try {
     u = new URL(reqUrl);
   } catch {
-    return false;
+    return "blocked";
   }
-  if (u.protocol === "data:" || u.protocol === "blob:" || u.protocol === "about:") return true;
-  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  if (u.protocol === "data:" || u.protocol === "blob:" || u.protocol === "about:") return "ok";
+  if (u.protocol !== "http:" && u.protocol !== "https:") return "blocked";
   const cls = classifyTarget(reqUrl);
-  if (cls.kind === "local") return allowLocal;
-  if (cls.kind !== "public") return false;
+  if (cls.kind === "local") return allowLocal ? "ok" : "blocked";
+  if (cls.kind !== "public") return "blocked";
   const host = u.hostname.replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
-  if (isIpLiteral(host)) return true; // literal public IP already validated above
+  if (isIpLiteral(host)) return "ok"; // literal public IP already validated above
   let verdict = dnsCache.get(host);
   if (!verdict) {
-    verdict = resolveHostAllowed(host, allowLocal);
+    verdict = resolveHostVerdict(host, allowLocal);
     dnsCache.set(host, verdict);
   }
   return verdict;
+}
+
+export async function isRequestPermitted(
+  reqUrl: string,
+  allowLocal: boolean,
+  dnsCache: Map<string, Promise<HostVerdict>>,
+): Promise<boolean> {
+  return (await assessRequest(reqUrl, allowLocal, dnsCache)) === "ok";
 }
 
 // R2 gate: an HTTP 200 is not success. Below this many visible characters
@@ -556,7 +604,14 @@ function connect(wsUrl: string, timeoutMs: number): Promise<CdpConnection> {
   });
 }
 
-async function waitForPortFile(path: string, timeoutMs: number): Promise<{ port: number; wsPath: string }> {
+// Poll for Chrome's DevToolsActivePort file. `failedEarly` reports a browser
+// process that already failed (spawn error or immediate exit) so a dead launch
+// fails in one poll tick instead of burning the whole timeout.
+async function waitForPortFile(
+  path: string,
+  timeoutMs: number,
+  failedEarly: () => Error | null,
+): Promise<{ port: number; wsPath: string }> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (existsSync(path)) {
@@ -565,6 +620,8 @@ async function waitForPortFile(path: string, timeoutMs: number): Promise<{ port:
       const wsPath = (lines[1] ?? "").trim();
       if (Number.isFinite(port) && port > 0 && wsPath) return { port, wsPath };
     }
+    const failure = failedEarly();
+    if (failure) throw failure;
     await sleep(50);
   }
   throw new Error("chrome debugging port not ready");
@@ -873,8 +930,25 @@ async function connectChrome(chrome: string, sandbox: boolean, budgetMs: number)
   // detached: Chrome becomes its own process-group leader so killChromeAndClean
   // can signal the whole group (parent + helper processes), not just the parent.
   const proc = spawn(chrome, args, { stdio: "ignore", detached: true });
+  // spawn failures (EACCES/ENOEXEC/ENOENT) surface as an async 'error' event;
+  // without a listener that event is an uncaught exception under node, killing
+  // the process before any server fallback can run. Capture it here and let the
+  // port poll fail fast on it (or on an immediate exit, e.g. a broken sandbox).
+  let spawnFailure: Error | null = null;
+  proc.once("error", (err) => {
+    spawnFailure = new BrowserSpawnError(`browser failed to launch: ${err.message}`);
+  });
+  const failedEarly = (): Error | null =>
+    spawnFailure ??
+    (proc.exitCode !== null || proc.signalCode !== null
+      ? new Error("browser exited before its debugging port was ready")
+      : null);
   try {
-    const { port, wsPath } = await waitForPortFile(join(dir, "DevToolsActivePort"), Math.min(8000, budgetMs));
+    const { port, wsPath } = await waitForPortFile(
+      join(dir, "DevToolsActivePort"),
+      Math.min(8000, budgetMs),
+      failedEarly,
+    );
     const cdp = await connect(`ws://127.0.0.1:${port}${wsPath}`, Math.min(8000, budgetMs));
     return { proc, cdp, dir };
   } catch (error) {
@@ -887,6 +961,12 @@ async function connectChrome(chrome: string, sandbox: boolean, budgetMs: number)
 // not explicitly permitted. renderLocally maps it to a server fallback so an
 // untrusted page is never rendered without the sandbox by default.
 class SandboxUnavailableError extends Error {}
+
+// Thrown when the browser binary itself could not be started (spawn-level
+// failure). Retrying without the sandbox cannot help, and labeling it
+// sandbox_unavailable would misdiagnose the machine; renderLocally maps it to
+// its own reason so the read still falls back to the server.
+class BrowserSpawnError extends Error {}
 
 async function runChrome(
   chrome: string,
@@ -903,7 +983,6 @@ async function runChrome(
   finalUrl: string;
   challenge?: boolean;
   unsandboxed: boolean;
-  blockedPrivate: boolean;
   httpStatus?: number;
 }> {
   const deadline = Date.now() + timeoutMs;
@@ -918,16 +997,41 @@ async function runChrome(
   let unsandboxed = false;
   try {
     session = await connectChrome(chrome, true, remaining());
-  } catch {
+  } catch (err) {
+    // A spawn-level failure means the binary itself is unrunnable; retrying
+    // without the sandbox cannot help, so surface it as what it is.
+    if (err instanceof BrowserSpawnError) throw err;
     if (!allowUnsandboxed) throw new SandboxUnavailableError();
     session = await connectChrome(chrome, false, remaining());
     unsandboxed = true;
   }
   const { proc, cdp, dir } = session;
-  // Set when a request to a blocked private/local target is aborted. `dnsCache`
-  // memoizes per-host resolution verdicts across a render's subresources.
-  let blockedPrivate = false;
-  const dnsCache = new Map<string, Promise<boolean>>();
+  // Per-render DNS verdict cache shared by the Fetch interceptor and the
+  // main-frame navigation watcher, so each host resolves at most once.
+  const dnsCache = new Map<string, Promise<HostVerdict>>();
+  // Verdicts for every Document navigation seen, keyed by frame. Only entries
+  // for the MAIN frame (the initial request and its redirect hops share that
+  // frameId) can fail the render: an iframe pointing at a private or dead host
+  // is denied by the Fetch interceptor while the page around it renders on.
+  const docNavVerdicts: { frameId: string; verdict: HostVerdict }[] = [];
+  let mainFrameId = "";
+  let rejectDenied: ((err: Error) => void) | undefined;
+  // Rejects the moment a main-frame navigation is denied, so a blocked or
+  // unresolvable main document aborts the render right away instead of waiting
+  // out the whole deadline for a load event that will never fire.
+  const denied = new Promise<never>((_, reject) => {
+    rejectDenied = reject;
+  });
+  denied.catch(() => {});
+  const checkDenied = (): void => {
+    if (mainFrameId === "") return;
+    for (const entry of docNavVerdicts) {
+      if (entry.frameId === mainFrameId && entry.verdict !== "ok") {
+        rejectDenied?.(new MainDocDeniedError(entry.verdict));
+        return;
+      }
+    }
+  };
 
   try {
     const work = (async () => {
@@ -947,8 +1051,10 @@ async function runChrome(
       //    frame navigation redirects.
       //  - Network.requestWillBeSent DOES fire for every main-frame hop (initial +
       //    each redirect), so we watch it to catch a navigation that lands on a
-      //    private/local address and mark the render blocked (its content is then
-      //    discarded and never handed to the server).
+      //    private/local address and abort the render (its content is discarded
+      //    and never handed to the server). Subframe navigations also arrive as
+      //    ResourceType "Document", so verdicts are recorded per frameId and only
+      //    the main frame's can fail the render.
       cdp.on("Fetch.requestPaused", (params) => {
         const requestId = String((params as { requestId?: unknown }).requestId ?? "");
         if (!requestId) return;
@@ -968,14 +1074,18 @@ async function runChrome(
           });
       });
       cdp.on("Network.requestWillBeSent", (params) => {
-        if (String((params as { type?: unknown }).type ?? "") !== "Document") return;
-        const navUrl = String((params as { request?: { url?: string } }).request?.url ?? "");
-        void isRequestPermitted(navUrl, allowLocalAddresses, dnsCache)
-          .then((ok) => {
-            if (!ok) blockedPrivate = true;
+        const p = params as { type?: unknown; frameId?: unknown; request?: { url?: string } };
+        if (String(p.type ?? "") !== "Document") return;
+        const navUrl = String(p.request?.url ?? "");
+        const frameId = String(p.frameId ?? "");
+        void assessRequest(navUrl, allowLocalAddresses, dnsCache)
+          .then((verdict) => {
+            docNavVerdicts.push({ frameId, verdict });
+            checkDenied();
           })
           .catch(() => {
-            blockedPrivate = true;
+            docNavVerdicts.push({ frameId, verdict: "unresolvable" });
+            checkDenied();
           });
       });
       // Record every Document response so the main frame's final HTTP status is
@@ -998,7 +1108,9 @@ async function runChrome(
       // otherwise reject with no handler and surface as an unhandled rejection.
       void loaded.catch(() => {});
       const navigated = await cdp.send("Page.navigate", { url }, sessionId);
-      const mainFrameId = String(navigated.frameId ?? "");
+      mainFrameId = String(navigated.frameId ?? "");
+      // Verdicts that resolved before the frame id was known are re-checked now.
+      checkDenied();
       await loaded;
       const mainDocStatus = (): number | undefined => {
         for (let i = docResponses.length - 1; i >= 0; i--) {
@@ -1060,12 +1172,22 @@ async function runChrome(
     })();
     // Swallow any late rejection once the deadline has already returned.
     work.catch(() => {});
-    const result = await withDeadline(work, remaining());
-    return { ...result, unsandboxed, blockedPrivate };
+    const result = await withDeadline(Promise.race([work, denied]), remaining());
+    // Belt and braces: a blocked main-frame hop can't normally produce a
+    // successful load (the interceptor denies it), but never emit content from
+    // a render whose main document touched a blocked address.
+    if (docNavVerdicts.some((e) => e.frameId === mainFrameId && e.verdict === "blocked")) {
+      throw new BlockedRequestError();
+    }
+    return { ...result, unsandboxed };
   } catch (err) {
-    // A blocked main-document request aborts the navigation; surface that
-    // distinctly so the caller does not hand the same URL to the server.
-    if (blockedPrivate) throw new BlockedRequestError();
+    if (err instanceof MainDocDeniedError) {
+      // Policy denial (private/local target): never re-fetch via the server.
+      if (err.verdict === "blocked") throw new BlockedRequestError();
+      // DNS failed here; the server resolves independently, so surface a plain
+      // render failure and let the caller take the server fallback.
+      throw new Error("main document host did not resolve locally");
+    }
     throw err;
   } finally {
     cdp.close();
@@ -1180,12 +1302,6 @@ export async function renderLocally(url: string, opts: RenderOptions): Promise<R
 
   try {
     const rendered = await runChrome(chrome, url, timeoutMs, opts.allowUnsandboxed === true, allowLocal);
-    // The navigation reached a blocked private/local address (a redirect hop or a
-    // rebinding host). Do not fall back to the server, which would re-follow it.
-    if (rendered.blockedPrivate) {
-      rawController.abort();
-      return { ok: false, reason: "blocked_address" };
-    }
     // A bot wall was detected right after load; nothing else to compute.
     if (rendered.challenge) {
       rawController.abort();
@@ -1226,7 +1342,10 @@ export async function renderLocally(url: string, opts: RenderOptions): Promise<R
     // The sandbox could not launch and unsandboxed render was not opted into:
     // surface a distinct reason so the caller falls back to the server.
     if (err instanceof SandboxUnavailableError) return { ok: false, reason: "sandbox_unavailable" };
-    // Navigation aborted because a request targeted a blocked private/local
+    // The browser binary itself could not be started (spawn failure): distinct
+    // from a sandbox problem, and still a plain server fallback for the caller.
+    if (err instanceof BrowserSpawnError) return { ok: false, reason: "browser_launch_failed" };
+    // The MAIN document resolved or redirected to a blocked private/local
     // address — do not fall back to the server (it would re-follow the URL).
     if (err instanceof BlockedRequestError) return { ok: false, reason: "blocked_address" };
     return { ok: false, reason: "render_failed" };
