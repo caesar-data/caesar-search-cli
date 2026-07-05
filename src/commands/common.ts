@@ -12,6 +12,34 @@ export interface GlobalOptions {
   baseUrl?: string;
   retry?: boolean;
   timeout?: string;
+  verbose?: boolean;
+}
+
+// Diagnostics to stderr are on when --verbose is passed or CAESAR_DEBUG is set
+// to anything other than an explicit off value.
+export function isVerbose(command: Command): boolean {
+  if (command.optsWithGlobals<GlobalOptions>().verbose === true) return true;
+  const env = process.env.CAESAR_DEBUG;
+  return env !== undefined && env !== "" && env !== "0" && env.toLowerCase() !== "false";
+}
+
+// Dev mode unlocks operator-only escape hatches (currently: rendering local/
+// private addresses via --allow-local-addresses). It is env-driven on purpose —
+// an agent that only controls command arguments cannot enable it, so a flag
+// alone can never reach the user's own network unless the human running the CLI
+// opted the environment in with CAESAR_DEV_MODE.
+export function isDevMode(): boolean {
+  const env = process.env.CAESAR_DEV_MODE;
+  return env !== undefined && env !== "" && env !== "0" && env.toLowerCase() !== "false";
+}
+
+// Whether unsandboxed local rendering is permitted. Gated behind an env var (not
+// just the --allow-unsandboxed-render flag) so an agent that only controls CLI
+// arguments can't opt into rendering a hostile page without the Chrome sandbox on
+// hosts where the sandbox can't launch; the operator must set the environment.
+export function isUnsandboxedRenderAllowed(): boolean {
+  const env = process.env.CAESAR_ALLOW_UNSANDBOXED_RENDER;
+  return env !== undefined && env !== "" && env !== "0" && env.toLowerCase() !== "false";
 }
 
 export function clientFromCommand(command: Command): ApiClient {

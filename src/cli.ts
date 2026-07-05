@@ -3,6 +3,7 @@ import { registerApi } from "./commands/api";
 import { registerAuth } from "./commands/auth";
 import { registerCompletion } from "./commands/completion";
 import { registerConfig } from "./commands/config";
+import { registerDoctor } from "./commands/doctor";
 import { registerFeedback } from "./commands/feedback";
 import { registerRead } from "./commands/read";
 import { registerSearch } from "./commands/search";
@@ -23,6 +24,7 @@ export function buildProgram(): Command {
     .option("--base-url <url>", "API base URL (overrides CAESAR_BASE_URL)")
     .option("--no-retry", "disable rate-limit/5xx retries")
     .option("--timeout <seconds>", "request timeout in seconds (default 30)")
+    .option("--verbose", "log local-render decisions to stderr (also enabled by CAESAR_DEBUG)")
     .exitOverride()
     .configureOutput({
       writeErr: (text) => process.stderr.write(text),
@@ -36,6 +38,8 @@ Exit codes:
 Environment:
   CAESAR_API_KEY    API key (or use: caesar-search auth login)
   CAESAR_BASE_URL   API base URL
+  CAESAR_DEV_MODE   dev mode: enables read --allow-local-addresses
+  CAESAR_ALLOW_UNSANDBOXED_RENDER  enables read --allow-unsandboxed-render
   NO_COLOR          disable color output`,
     );
 
@@ -47,6 +51,7 @@ Environment:
   registerApi(program);
   registerCompletion(program);
   registerUpdate(program);
+  registerDoctor(program);
 
   program
     .command("version")
