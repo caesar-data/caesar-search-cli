@@ -1,9 +1,69 @@
 import type { Command } from "commander";
-import { badInput } from "../output/exit";
+import { badInput, CliError, EXIT_AUTH, EXIT_BAD_INPUT } from "../output/exit";
 import { emitData, renderDocumentHuman } from "../output/render";
-import { argOrStdin, clientFromCommand, looksLikeDocID, outputOptions, parsePositiveInt } from "./common";
+import { classifyTarget, renderLocally } from "../render/index";
+import {
+  argOrStdin,
+  clientFromCommand,
+  isDevMode,
+  isUnsandboxedRenderAllowed,
+  isVerbose,
+  looksLikeDocID,
+  outputOptions,
+  parsePositiveInt,
+  timeoutMsFromCommand,
+} from "./common";
 
 const INCLUDE_SECTIONS = ["metadata", "content", "passages", "capture_history"];
+
+interface RenderWarning {
+  code: string;
+  message: string;
+}
+
+// One-line stderr diagnostic for how the read was fetched. Off unless --verbose
+// or CAESAR_DEBUG; never touches stdout, which is the data/JSON contract.
+function vlog(enabled: boolean, message: string): void {
+  if (enabled) process.stderr.write(`caesar: ${message}\n`);
+}
+
+// Build the response a locally-rendered read emits, honoring --include. Local
+// render can satisfy `metadata` (doc) and `content` only; `passages` and
+// `capture_history` are server-side, so a request for either skips local render
+// entirely (see skipReason). This is a deliberately reduced envelope versus the
+// server's DocumentResponse: request_id/session_id/access are absent because no
+// server request was made to originate them, and there is no doc_id because a
+// live render is not a server capture (re-read by URL, or use --no-local-render).
+function localEnvelope(
+  includeSet: Set<string>,
+  doc: { canonical_url: string; title: string },
+  content: Record<string, unknown>,
+  warning: RenderWarning,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (includeSet.has("metadata")) out.doc = doc;
+  if (includeSet.has("content")) out.content = content;
+  out.warnings = [warning];
+  return out;
+}
+
+// Request + emit for the server read path. Shared by the doc_id/query/start-char
+// paths and by the local-render fallback. `extraWarning` lets the fallback path
+// annotate the response so JSON consumers can see local render was attempted.
+async function serverRead(
+  actionCommand: Command,
+  body: Record<string, unknown>,
+  extraWarning?: RenderWarning,
+): Promise<void> {
+  const client = clientFromCommand(actionCommand);
+  const response = (await client.post("/v1/document", body)) as Record<string, unknown>;
+  if (extraWarning) {
+    const warnings = Array.isArray(response.warnings) ? [...(response.warnings as unknown[])] : [];
+    warnings.push(extraWarning);
+    response.warnings = warnings;
+  }
+  emitData(response, outputOptions(actionCommand), renderDocumentHuman);
+}
 
 function registerReadLike(program: Command, name: string, aliases: string[]): void {
   const command = program
@@ -15,6 +75,15 @@ function registerReadLike(program: Command, name: string, aliases: string[]): vo
     .option("--max-chars <n>", "content character cap", "12000")
     .option("--start-char <n>", "resume a truncated read from this offset", "0")
     .option("--include <sections>", `comma list of ${INCLUDE_SECTIONS.join(",")}`, "metadata,content")
+    .option("--no-local-render", "always fetch via the server instead of rendering the page locally")
+    .option(
+      "--allow-local-addresses",
+      "(dev mode only) local render of loopback/private/link-local hosts; requires CAESAR_DEV_MODE",
+    )
+    .option(
+      "--allow-unsandboxed-render",
+      "if the Chrome sandbox can't launch, render without it instead of the server (also requires CAESAR_ALLOW_UNSANDBOXED_RENDER)",
+    )
     .addHelpText(
       "after",
       `
@@ -37,6 +106,7 @@ Examples:
           throw badInput(`--include section "${section}" is not one of ${INCLUDE_SECTIONS.join(", ")}`);
         }
       }
+      const includeSet = new Set(include);
 
       const content: Record<string, unknown> = {
         selection: options.query ? "query_relevant" : "full_document",
@@ -50,16 +120,218 @@ Examples:
       }
 
       const body: Record<string, unknown> = { include, content };
-      if (looksLikeDocID(target)) {
+      const isDocID = looksLikeDocID(target);
+      if (isDocID) {
         body.doc_id = target;
       } else {
         body.canonical_url = target;
       }
       if (options.query) body.query = options.query;
 
-      const client = clientFromCommand(actionCommand);
-      const response = await client.post("/v1/document", body);
-      emitData(response, outputOptions(actionCommand), renderDocumentHuman);
+      const verbose = isVerbose(actionCommand);
+      // --allow-local-addresses is honored only in dev mode: the flag alone (which
+      // an agent could supply) must not be enough to reach the user's own network.
+      const allowLocalAddresses = options.allowLocalAddresses === true && isDevMode();
+      // Both the flag AND the env must be set; flag alone falls back to the server
+      // (never silently renders a hostile page unsandboxed off CLI args).
+      const allowUnsandboxed = options.allowUnsandboxedRender === true && isUnsandboxedRenderAllowed();
+
+      // A URL target is a trust boundary: reject schemes and hosts we must never
+      // point the user's browser at, before deciding local-vs-server. This blocks
+      // file:/data:, hostless URLs, and loopback/private/link-local addresses for
+      // BOTH paths — a private URL is never a valid public read, and the server
+      // cannot reach the user's own network either.
+      const classified = isDocID ? null : classifyTarget(target);
+      // A local/internal address is renderable locally (with dev-mode opt-in) but
+      // must never be sent to the server: the server can't reach the user's own
+      // network, and doing so would turn the CLI into a server-side SSRF vector.
+      const isLocalAddress = classified?.kind === "local";
+      if (classified) {
+        if (classified.kind === "bad_scheme") {
+          throw badInput(
+            `read only accepts http(s):// URLs or a doc_id; "${classified.scheme}:" targets are not allowed.`,
+          );
+        }
+        if (classified.kind === "no_host") {
+          throw badInput("read needs a full URL with a host, e.g. https://example.com/page");
+        }
+        if (classified.kind === "local" && !allowLocalAddresses) {
+          // Distinguish "flag missing" from "flag present but not in dev mode" so
+          // the operator knows exactly what to change.
+          if (options.allowLocalAddresses === true) {
+            throw badInput(
+              `--allow-local-addresses is only honored in dev mode; set CAESAR_DEV_MODE=1 to read the ` +
+                `local/internal address "${classified.url.hostname}".`,
+            );
+          }
+          throw badInput(
+            `refusing to read the local/internal address "${classified.url.hostname}". ` +
+              "Loopback, private, and link-local targets are blocked. To read a trusted local host in " +
+              "development, set CAESAR_DEV_MODE=1 and pass --allow-local-addresses.",
+          );
+        }
+      }
+
+      // Render with the user's own Chrome only for a plain URL read: a full
+      // document with no query-relevance selection. doc_id and --query reads
+      // need server-side selection, so we record why local render was skipped
+      // rather than silently going remote. A --start-char continuation of a URL
+      // read stays LOCAL: it re-renders and slices the same extraction, so its
+      // offsets are consistent with the read that reported truncated:true —
+      // server offsets index a different extraction and must never be mixed in.
+      // An unparseable URL can't be validated for local render either, so it
+      // routes to the server (which owns URL normalization).
+      let skipReason: string | null = null;
+      if (isDocID) skipReason = "doc_id input";
+      else if (options.query) skipReason = "query selection";
+      else if (options.localRender === false) skipReason = "--no-local-render";
+      else if (classified?.kind === "unparseable") skipReason = "unvalidated URL";
+      // passages and capture_history are server-side artifacts a local render
+      // cannot produce; if the caller asked for either, use the server so the
+      // requested sections are actually present.
+      else if (includeSet.has("passages") || includeSet.has("capture_history"))
+        skipReason = "passages/capture_history requested";
+
+      if (skipReason === null) {
+        // The global --timeout bounds the whole read on EITHER path. A tighter
+        // --timeout shrinks the local render's deadline (so `--timeout 5` really
+        // is ~5s, not 15s of local render plus a server call); a looser one does
+        // NOT stretch it — patience for a slow server is not a license for a
+        // slow local render, whose 15s default stays the ceiling.
+        const userTimeoutMs = timeoutMsFromCommand(actionCommand);
+        const startedAt = Date.now();
+        const local = await renderLocally(target, {
+          maxChars,
+          allowLocalAddresses,
+          allowUnsandboxed,
+          timeoutMs: userTimeoutMs !== undefined ? Math.min(userTimeoutMs, 15000) : undefined,
+        });
+        const elapsedMs = Date.now() - startedAt;
+        if (local.ok) {
+          vlog(verbose, `local render → USED (${local.strategy}, ${elapsedMs}ms, ${local.textLength} chars)`);
+          // Local render succeeded: return it directly, no server round-trip.
+          // Continuations slice the same extraction at the requested offset, so
+          // --start-char paging over local reads is offset-consistent (modulo the
+          // page itself changing between renders).
+          const text = local.markdown.slice(startChar, startChar + maxChars);
+          const composed = localEnvelope(
+            includeSet,
+            { canonical_url: local.finalUrl || target, title: local.title },
+            {
+              selection: "full_document",
+              format: "markdown",
+              text,
+              char_count: text.length,
+              truncated: startChar + text.length < local.markdown.length,
+              start_char: startChar,
+            },
+            {
+              code: "local_render",
+              message:
+                "Content was rendered locally from the live page; a server capture was not used." +
+                (startChar > 0
+                  ? " Offsets index this render's extraction; if the previous chunk was fetched from the" +
+                    " server (local_render_fallback), re-read from --start-char 0 instead of stitching."
+                  : ""),
+            },
+          );
+          emitData(composed, outputOptions(actionCommand), renderDocumentHuman);
+          return;
+        }
+        // A bot wall (challenge/CAPTCHA interstitial) means the LIVE page refuses
+        // automated readers — but the server's crawler may still hold a good
+        // capture, so fall back to it like any other local failure (never for a
+        // local address, which the server cannot reach). Only when the server
+        // ALSO fails is the wall surfaced as a skip: exit 0 with empty content
+        // and a clear warning, so the caller sees an expected skip, not a hard
+        // error, and can just read a different source.
+        if (local.reason === "challenge" && !isLocalAddress) {
+          vlog(verbose, `local render → FALLBACK: bot wall (challenge) → server`);
+          try {
+            await serverRead(actionCommand, body, {
+              code: "local_render_fallback",
+              message:
+                "local render hit a bot-detection wall (challenge); fetched from server" +
+                (startChar > 0
+                  ? "; server character offsets index a different extraction and may not align with a previous local read"
+                  : ""),
+            });
+            return;
+          } catch (err) {
+            // Auth and input errors are environmental, not page-specific:
+            // masking them as a bot-wall skip would hide a broken key behind
+            // silently empty reads. Everything else (no capture, API error,
+            // server timeout) means neither path can produce this page.
+            if (err instanceof CliError && (err.exitCode === EXIT_AUTH || err.exitCode === EXIT_BAD_INPUT)) {
+              throw err;
+            }
+            const detail = err instanceof Error ? err.message : String(err);
+            vlog(verbose, `server fallback failed (${detail}) → bot_wall_skipped`);
+            const skipped = localEnvelope(
+              includeSet,
+              { canonical_url: target, title: "" },
+              {
+                selection: "full_document",
+                format: "markdown",
+                text: "",
+                char_count: 0,
+                truncated: false,
+                start_char: startChar,
+              },
+              {
+                code: "bot_wall_skipped",
+                message:
+                  "This page is behind a bot-detection wall (challenge/CAPTCHA) and the server could not " +
+                  `serve it either (${detail}). Returning empty content; try a different source.`,
+              },
+            );
+            emitData(skipped, outputOptions(actionCommand), renderDocumentHuman);
+            return;
+          }
+        }
+        // The target resolved or redirected to a private/internal address mid-
+        // render. Never hand it to the server, which would re-follow the same URL
+        // server-side; fail closed instead.
+        if (local.reason === "blocked_address") {
+          throw badInput(
+            `refusing to read "${target}": it resolves or redirects to a private/internal address, ` +
+              "which is never fetched via the server.",
+          );
+        }
+        // A local/internal address that could not be rendered locally has nowhere
+        // to fall back to — the server cannot reach the user's own network.
+        if (isLocalAddress) {
+          throw badInput(
+            `local render of "${classified?.url.hostname ?? target}" failed (${local.reason}); ` +
+              "local/internal addresses are only read via local render and are never sent to the server.",
+          );
+        }
+        // Local render produced nothing usable; go to the server and annotate the
+        // response so the fallback (and its reason) is visible to JSON consumers.
+        vlog(verbose, `local render → FALLBACK: ${local.reason} → server`);
+        await serverRead(actionCommand, body, {
+          code: "local_render_fallback",
+          message:
+            `local render unavailable (${local.reason}); fetched from server` +
+            (startChar > 0
+              ? "; server character offsets index a different extraction and may not align with a previous local read"
+              : ""),
+        });
+        return;
+      }
+
+      // A local/internal address reaches here only via a server-only feature
+      // (--query, --include passages/capture_history, --no-local-render). The
+      // server can't reach the user's own network, so rather than send it a
+      // private URL, reject with a clear reason.
+      if (isLocalAddress) {
+        throw badInput(
+          `"${classified?.url.hostname ?? target}" is a local/internal address; ${skipReason} requires the ` +
+            "server, which cannot reach it. Drop that option to read it via local render.",
+        );
+      }
+      vlog(verbose, `local render → SKIPPED: ${skipReason} → server`);
+      await serverRead(actionCommand, body);
     });
   return void command;
 }

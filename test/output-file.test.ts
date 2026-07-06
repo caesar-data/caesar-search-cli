@@ -52,9 +52,12 @@ describe("-o / --output", () => {
       body: { doc: { doc_id: "x", title: "Doc" }, content: { text: "Body text." } },
     }));
     const path = tmpFile("doc.json");
-    const result = await runCli(["read", "https://example.com/post", "--json", "-o", path], {
-      env: { CAESAR_BASE_URL: server.url },
-    });
+    const result = await runCli(
+      ["read", "https://example.com/post", "--json", "--no-local-render", "-o", path],
+      {
+        env: { CAESAR_BASE_URL: server.url },
+      },
+    );
     server.stop();
     expect(result.code).toBe(0);
     expect(result.stdout).toBe("");

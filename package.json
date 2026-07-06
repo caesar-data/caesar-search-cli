@@ -27,7 +27,7 @@
     "AGENTS.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "bun build src/index.ts --target node --outfile dist/index.js && chmod +x dist/index.js",
@@ -39,11 +39,12 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
+    "@mozilla/readability": "^0.6.0",
     "@types/bun": "^1.3.14",
     "@types/node": "^25.9.3",
+    "commander": "^15.0.0",
     "openapi-typescript": "^7.13.0",
     "typescript": "^6.0.3",
-    "commander": "^15.0.0",
     "zod": "^4.4.3"
   }
 }
