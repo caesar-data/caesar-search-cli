@@ -46,6 +46,27 @@ describe("exit codes", () => {
     expect(server.calls.length).toBe(1);
   });
 
+  test("4 on insufficient balance with top-up hint", async () => {
+    const server = mockServer(() => ({
+      status: 402,
+      body: {
+        type: "error",
+        error: {
+          code: "insufficient_balance",
+          message: "Your organization's balance is depleted.",
+        },
+      },
+    }));
+    const result = await runCli(["search", "x", "--json", "--no-retry"], {
+      env: { CAESAR_BASE_URL: server.url },
+    });
+    server.stop();
+    expect(result.code).toBe(4);
+    const envelope = JSON.parse(result.stderr);
+    expect(envelope.error.code).toBe("insufficient_balance");
+    expect(envelope.error.hint).toContain("Top up");
+  });
+
   test("5 on timeout", async () => {
     const server = Bun.serve({
       port: 0,

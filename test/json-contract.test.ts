@@ -48,7 +48,8 @@ describe("json output contract", () => {
     const byURL = server.calls[1]?.body as Record<string, unknown>;
     expect(byURL.canonical_url).toBe("https://example.com/page");
     expect(byURL.query).toBe("what is it");
-    expect((byURL.content as Record<string, unknown>).selection).toBe("query_relevant");
+    expect((byURL.content as Record<string, unknown>).selection).toBe("full_document");
+    expect((byURL.content as Record<string, unknown>).max_chars).toBeUndefined();
   });
 
   test("feedback maps flags and validates event type", async () => {

@@ -11,8 +11,8 @@ function registerReadLike(program: Command, name: string, aliases: string[]): vo
     .aliases(aliases)
     .description("Read a page as clean markdown. Accepts a URL or a doc_id from search results.")
     .argument("<url|doc_id>", "URL or doc_id to read, or - to read it from stdin")
-    .option("--query <text>", "focus content selection on this question")
-    .option("--max-chars <n>", "content character cap", "12000")
+    .option("--query <text>", "query context for the read")
+    .option("--max-chars <n>", "optional content character cap")
     .option("--start-char <n>", "resume a truncated read from this offset", "0")
     .option("--include <sections>", `comma list of ${INCLUDE_SECTIONS.join(",")}`, "metadata,content")
     .addHelpText(
@@ -25,7 +25,10 @@ Examples:
     )
     .action(async (targetArg: string, options, actionCommand: Command) => {
       const target = await argOrStdin(targetArg, "url or doc_id");
-      const maxChars = parsePositiveInt("--max-chars", options.maxChars, 1, 50_000);
+      const maxChars =
+        options.maxChars === undefined
+          ? undefined
+          : parsePositiveInt("--max-chars", options.maxChars, 1, 50_000);
       const startChar = parsePositiveInt("--start-char", `${options.startChar}`, 0, 10_000_000);
 
       const include = String(options.include)
@@ -39,10 +42,10 @@ Examples:
       }
 
       const content: Record<string, unknown> = {
-        selection: options.query ? "query_relevant" : "full_document",
+        selection: "full_document",
         format: "markdown",
-        max_chars: maxChars,
       };
+      if (maxChars !== undefined) content.max_chars = maxChars;
       if (startChar > 0) {
         // Continuation reads address the raw document text.
         content.selection = "full_document";

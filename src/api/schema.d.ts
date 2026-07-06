@@ -126,17 +126,16 @@ export interface components {
             include_offsets?: boolean;
             /**
              * Format: int64
-             * @description Maximum content.text characters to return. Longer documents set content.truncated true; continue with content.range.start_char instead of retrying with a larger cap.
-             * @default 12000
+             * @description Optional maximum content.text characters to return. Omit it for the full selected content. Longer capped reads set content.truncated true; continue with content.range.start_char instead of retrying with a larger cap.
              */
-            max_chars: number;
+            max_chars?: number;
             /** @description Passage identifiers to return when selection is passage_ids, from a search result's passages or a previous read. */
             passage_ids?: string[] | null;
             /** @description Continuation read: return content starting at a character offset of the same document. */
             range?: components["schemas"]["ContentRange"];
             /**
-             * @description How content.text is chosen: query_relevant (default) returns the passages most relevant to query; top_passages returns the document's leading passages; passage_ids returns exactly content.passage_ids; full_document returns the extracted text up to max_chars; none returns no content body.
-             * @default query_relevant
+             * @description How content.text is chosen: full_document (default) returns the extracted document text; query_relevant returns the passages most relevant to query; top_passages returns the document's leading passages; passage_ids returns exactly content.passage_ids; none returns no content body.
+             * @default full_document
              * @enum {string}
              */
             selection: "none" | "query_relevant" | "top_passages" | "passage_ids" | "full_document";
@@ -171,7 +170,7 @@ export interface components {
             doc_id?: string;
             /** @description Sections to return. Omit it for everything available; otherwise an allowlist of passages, capture_history, and content (document metadata is always returned - send just metadata for a metadata-only read). */
             include?: ("metadata" | "passages" | "capture_history" | "content")[] | null;
-            /** @description Query context for passage selection: with content.selection query_relevant, content and passages are chosen for relevance to this text. */
+            /** @description Query context for passage selection when content.selection is query_relevant. */
             query?: string;
         };
         DocumentResponse: {
@@ -367,6 +366,8 @@ export interface components {
             query: string;
             /** @description Optional response shaping: verbosity preset and serialized-size budget. */
             response?: components["schemas"]["ResponseShape"];
+            /** @description Which indexes to search. Omit it for the web index. Additive: existing clients are unaffected. */
+            scope?: components["schemas"]["SearchScope"];
             /** @description Caller-provided query rewrites. The first entry replaces query as the text sent to the search index; query still drives reranking and passage selection. All entries are visible to the server-side query rewriter. */
             search_queries?: string[] | null;
             /**
@@ -400,6 +401,7 @@ export interface components {
             canonical_url: string;
             description?: string;
             doc_id: string;
+            index?: string;
             metadata?: components["schemas"]["SearchResultMetadata"];
             passages?: components["schemas"]["Passage"][] | null;
             provenance?: components["schemas"]["DocumentProvenance"];
@@ -417,6 +419,15 @@ export interface components {
             last_crawled_at?: string;
             last_seen_at?: string;
             published_at?: string;
+        };
+        SearchScope: {
+            /** @description Indexes to search: web (the shared web corpus) and/or workspace (your organization's ingested documents). Default: ["web"]. */
+            indexes?: string[] | null;
+            /**
+             * Format: uuid
+             * @description Workspace to search; required when indexes includes workspace.
+             */
+            workspace_id?: string;
         };
         SearchScore: {
             /** Format: double */
@@ -484,6 +495,15 @@ export interface operations {
             };
             /** @description Invalid API key, or missing API key when keyless access is disabled. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Insufficient prepaid balance. */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -668,6 +688,15 @@ export interface operations {
             };
             /** @description Invalid API key, or missing API key when keyless access is disabled. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Insufficient prepaid balance. */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };

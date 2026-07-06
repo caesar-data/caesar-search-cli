@@ -116,7 +116,11 @@ export class ApiClient {
         );
       } else {
         const hint =
-          response.status === 429 ? "Rate limited. Wait and retry, or lower request volume." : undefined;
+          code === "insufficient_balance"
+            ? "Top up your organization's balance in the Caesar billing page."
+            : response.status === 429
+              ? "Rate limited. Wait and retry, or lower request volume."
+              : undefined;
         lastError = new CliError(code, message, EXIT_API, hint);
       }
       throw lastError;
