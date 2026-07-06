@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { badInput } from "../output/exit";
+import { badInput, CliError, EXIT_AUTH, EXIT_BAD_INPUT } from "../output/exit";
 import { emitData, renderDocumentHuman } from "../output/render";
 import { classifyTarget, renderLocally } from "../render/index";
 import {
@@ -11,6 +11,7 @@ import {
   looksLikeDocID,
   outputOptions,
   parsePositiveInt,
+  timeoutMsFromCommand,
 } from "./common";
 
 const INCLUDE_SECTIONS = ["metadata", "content", "passages", "capture_history"];
@@ -192,8 +193,19 @@ Examples:
         skipReason = "passages/capture_history requested";
 
       if (skipReason === null) {
+        // The global --timeout bounds the whole read on EITHER path. A tighter
+        // --timeout shrinks the local render's deadline (so `--timeout 5` really
+        // is ~5s, not 15s of local render plus a server call); a looser one does
+        // NOT stretch it — patience for a slow server is not a license for a
+        // slow local render, whose 15s default stays the ceiling.
+        const userTimeoutMs = timeoutMsFromCommand(actionCommand);
         const startedAt = Date.now();
-        const local = await renderLocally(target, { maxChars, allowLocalAddresses, allowUnsandboxed });
+        const local = await renderLocally(target, {
+          maxChars,
+          allowLocalAddresses,
+          allowUnsandboxed,
+          timeoutMs: userTimeoutMs !== undefined ? Math.min(userTimeoutMs, 15000) : undefined,
+        });
         const elapsedMs = Date.now() - startedAt;
         if (local.ok) {
           vlog(verbose, `local render → USED (${local.strategy}, ${elapsedMs}ms, ${local.textLength} chars)`);
@@ -215,38 +227,67 @@ Examples:
             },
             {
               code: "local_render",
-              message: "Content was rendered locally from the live page; a server capture was not used.",
+              message:
+                "Content was rendered locally from the live page; a server capture was not used." +
+                (startChar > 0
+                  ? " Offsets index this render's extraction; if the previous chunk was fetched from the" +
+                    " server (local_render_fallback), re-read from --start-char 0 instead of stitching."
+                  : ""),
             },
           );
           emitData(composed, outputOptions(actionCommand), renderDocumentHuman);
           return;
         }
-        // A bot wall (challenge/CAPTCHA interstitial) means the live page refuses
-        // automated readers. Skip it instead of paying for a server round-trip: a
-        // search-driven workflow can just read a different result. Exit 0 with a
-        // clear warning and empty content so the caller sees an expected skip, not
-        // a hard error.
-        if (local.reason === "challenge") {
-          vlog(verbose, `local render → SKIPPED: bot wall (challenge) → page not fetched`);
-          const skipped = localEnvelope(
-            includeSet,
-            { canonical_url: target, title: "" },
-            {
-              selection: "full_document",
-              format: "markdown",
-              text: "",
-              char_count: 0,
-              truncated: false,
-              start_char: 0,
-            },
-            {
-              code: "bot_wall_skipped",
+        // A bot wall (challenge/CAPTCHA interstitial) means the LIVE page refuses
+        // automated readers — but the server's crawler may still hold a good
+        // capture, so fall back to it like any other local failure (never for a
+        // local address, which the server cannot reach). Only when the server
+        // ALSO fails is the wall surfaced as a skip: exit 0 with empty content
+        // and a clear warning, so the caller sees an expected skip, not a hard
+        // error, and can just read a different source.
+        if (local.reason === "challenge" && !isLocalAddress) {
+          vlog(verbose, `local render → FALLBACK: bot wall (challenge) → server`);
+          try {
+            await serverRead(actionCommand, body, {
+              code: "local_render_fallback",
               message:
-                "This page is behind a bot-detection wall (challenge/CAPTCHA); it was skipped and not fetched from the server. Try a different source.",
-            },
-          );
-          emitData(skipped, outputOptions(actionCommand), renderDocumentHuman);
-          return;
+                "local render hit a bot-detection wall (challenge); fetched from server" +
+                (startChar > 0
+                  ? "; server character offsets index a different extraction and may not align with a previous local read"
+                  : ""),
+            });
+            return;
+          } catch (err) {
+            // Auth and input errors are environmental, not page-specific:
+            // masking them as a bot-wall skip would hide a broken key behind
+            // silently empty reads. Everything else (no capture, API error,
+            // server timeout) means neither path can produce this page.
+            if (err instanceof CliError && (err.exitCode === EXIT_AUTH || err.exitCode === EXIT_BAD_INPUT)) {
+              throw err;
+            }
+            const detail = err instanceof Error ? err.message : String(err);
+            vlog(verbose, `server fallback failed (${detail}) → bot_wall_skipped`);
+            const skipped = localEnvelope(
+              includeSet,
+              { canonical_url: target, title: "" },
+              {
+                selection: "full_document",
+                format: "markdown",
+                text: "",
+                char_count: 0,
+                truncated: false,
+                start_char: startChar,
+              },
+              {
+                code: "bot_wall_skipped",
+                message:
+                  "This page is behind a bot-detection wall (challenge/CAPTCHA) and the server could not " +
+                  `serve it either (${detail}). Returning empty content; try a different source.`,
+              },
+            );
+            emitData(skipped, outputOptions(actionCommand), renderDocumentHuman);
+            return;
+          }
         }
         // The target resolved or redirected to a private/internal address mid-
         // render. Never hand it to the server, which would re-follow the same URL

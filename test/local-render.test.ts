@@ -97,7 +97,7 @@ describe("local render tier", () => {
     expect(warnings.find((w) => w.code === "local_render_fallback")?.message).toContain("low_density");
   });
 
-  test("challenge-interstitial fixture is skipped, not fetched from the server", async () => {
+  test("challenge-interstitial fixture falls back to the server capture", async () => {
     const server = mockServer(() => ({
       body: { doc: { doc_id: DOC_ID, title: "T" }, content: { text: "server body" } },
     }));
@@ -113,16 +113,70 @@ describe("local render tier", () => {
     server.stop();
 
     expect(result.code).toBe(0);
-    // A bot wall is skipped outright: no server round-trip, empty content, and a
-    // clear warning — NOT a local_render_fallback (which would have paid for the
-    // server) and NOT a local_render success.
-    expect(server.calls.length).toBe(0);
+    // The LIVE page refuses automated readers, but the server's crawler may hold
+    // a good capture — the read must fall back, not skip, and say why.
+    expect(server.calls.length).toBe(1);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.content.text).toBe("server body");
+    const warnings = payload.warnings as { code?: string; message?: string }[];
+    const codes = warnings.map((w) => w.code);
+    expect(codes).toContain("local_render_fallback");
+    expect(codes).not.toContain("bot_wall_skipped");
+    expect(codes).not.toContain("local_render");
+    expect(warnings.find((w) => w.code === "local_render_fallback")?.message).toContain("bot-detection wall");
+  });
+
+  test("a challenge whose server fallback also fails is surfaced as bot_wall_skipped", async () => {
+    // The server has nothing for this page either (e.g. no capture): only THEN
+    // does the read exit 0 with empty content and the bot_wall_skipped warning.
+    const server = mockServer(() => ({
+      status: 404,
+      body: { error: { code: "not_found", message: "no capture for this URL" } },
+    }));
+    const fixture = writeFixture({
+      markdown: "Just a moment... checking your browser before proceeding.",
+      title: "Just a moment",
+      textLength: 5000,
+    });
+
+    const result = await runCli(
+      ["read", URL, "--json", "--start-char", "40", "--base-url", server.url, "--key", "test"],
+      { env: { CAESAR_LOCAL_RENDER_FIXTURE: fixture } },
+    );
+    server.stop();
+
+    expect(result.code).toBe(0);
+    expect(server.calls.length).toBe(1);
     const payload = JSON.parse(result.stdout);
     expect(payload.content.text).toBe("");
+    // The requested offset is echoed back, so offset-keyed pagers see the skip
+    // at the position they asked for, not a reset to 0.
+    expect(payload.content.start_char).toBe(40);
     const codes = (payload.warnings as { code?: string }[]).map((w) => w.code);
     expect(codes).toContain("bot_wall_skipped");
-    expect(codes).not.toContain("local_render_fallback");
     expect(codes).not.toContain("local_render");
+  });
+
+  test("a challenge with a broken key propagates the auth error, not a silent skip", async () => {
+    // Auth failures are environmental: masking them as bot_wall_skipped would
+    // hide a broken key behind silently empty reads.
+    const server = mockServer(() => ({
+      status: 401,
+      body: { error: { code: "unauthorized", message: "bad key" } },
+    }));
+    const fixture = writeFixture({
+      markdown: "Just a moment... checking your browser before proceeding.",
+      title: "Just a moment",
+      textLength: 5000,
+    });
+
+    const result = await runCli(["read", URL, "--json", "--base-url", server.url, "--key", "test"], {
+      env: { CAESAR_LOCAL_RENDER_FIXTURE: fixture },
+    });
+    server.stop();
+
+    expect(result.code).toBe(3);
+    expect(result.stdout).not.toContain("bot_wall_skipped");
   });
 
   test("an HTTP error page falls back with the status as the reason", async () => {
@@ -153,7 +207,7 @@ describe("local render tier", () => {
     expect(warnings.find((w) => w.code === "local_render_fallback")?.message).toContain("http_404");
   });
 
-  test("a challenge interstitial served as 403 is still a bot-wall skip, not an HTTP fallback", async () => {
+  test("a challenge interstitial served as 403 falls back as a challenge, not an HTTP error", async () => {
     const server = mockServer(() => ({
       body: { doc: { doc_id: DOC_ID, title: "T" }, content: { text: "server body" } },
     }));
@@ -170,11 +224,13 @@ describe("local render tier", () => {
     server.stop();
 
     expect(result.code).toBe(0);
-    // challenge outranks the HTTP error: skipped outright, no paid server call.
-    expect(server.calls.length).toBe(0);
-    const codes = (JSON.parse(result.stdout).warnings as { code?: string }[]).map((w) => w.code);
-    expect(codes).toContain("bot_wall_skipped");
-    expect(codes).not.toContain("local_render_fallback");
+    // challenge outranks the HTTP error: the fallback names the bot wall, not
+    // http_403, so the caller knows the live page challenged us.
+    expect(server.calls.length).toBe(1);
+    const warnings = JSON.parse(result.stdout).warnings as { code?: string; message?: string }[];
+    const fallback = warnings.find((w) => w.code === "local_render_fallback");
+    expect(fallback?.message).toContain("bot-detection wall");
+    expect(fallback?.message).not.toContain("http_403");
   });
 
   test("a small-but-complete static page is a local success, not a fallback", async () => {
@@ -195,6 +251,33 @@ describe("local render tier", () => {
     const payload = JSON.parse(result.stdout);
     expect(payload.content.text).toContain("Example Domain");
     expect((payload.warnings as { code?: string }[]).map((w) => w.code)).toContain("local_render");
+  });
+
+  test("a small static page that ships scripts falls back (possible unhydrated shell)", async () => {
+    const server = mockServer(() => ({
+      body: { doc: { doc_id: DOC_ID, title: "T" }, content: { text: "server body" } },
+    }));
+    // Same tiny content, but the raw HTML carries <script> tags and the DOM never
+    // grew: structurally indistinguishable from an SPA shell whose JS failed to
+    // hydrate here, so the density floor must apply and bounce it to the server.
+    const small = "# Loading\n\nPlease wait while the application starts up for you.";
+    const fixture = writeFixture({
+      markdown: small,
+      title: "App",
+      textLength: 60,
+      baseline: "static",
+      rawHasScript: true,
+    });
+
+    const result = await runCli(["read", URL, "--json", "--base-url", server.url, "--key", "test"], {
+      env: { CAESAR_LOCAL_RENDER_FIXTURE: fixture },
+    });
+    server.stop();
+
+    expect(result.code).toBe(0);
+    expect(server.calls.length).toBe(1);
+    const warnings = JSON.parse(result.stdout).warnings as { code?: string; message?: string }[];
+    expect(warnings.find((w) => w.code === "local_render_fallback")?.message).toContain("low_density");
   });
 
   test("a small page with NO baseline signal still falls back (fail closed)", async () => {
@@ -273,7 +356,11 @@ describe("local render tier", () => {
     expect(payload.content.start_char).toBe(40);
     expect(payload.content.char_count).toBe(25);
     expect(payload.content.truncated).toBe(true);
-    expect((payload.warnings as { code?: string }[]).map((w) => w.code)).toContain("local_render");
+    const warnings = payload.warnings as { code?: string; message?: string }[];
+    expect(warnings.map((w) => w.code)).toContain("local_render");
+    // A continuation warns about the one unguarded offset crossing: a first read
+    // served by the server followed by a local continuation.
+    expect(warnings.find((w) => w.code === "local_render")?.message).toContain("--start-char 0");
   });
 
   test("--start-char past the end of a local render returns an empty, non-truncated tail", async () => {
@@ -414,7 +501,7 @@ describe("local render observability", () => {
     expect(result.stderr).toMatch(/local render.*SKIPPED/);
   });
 
-  test("--verbose logs SKIPPED and makes no server call on a bot wall", async () => {
+  test("--verbose logs FALLBACK with the bot wall as the reason", async () => {
     const server = mockServer(() => serverBody);
     const fixture = writeFixture({
       markdown: "Just a moment... checking your browser before proceeding.",
@@ -427,8 +514,8 @@ describe("local render observability", () => {
     );
     server.stop();
     expect(result.code).toBe(0);
-    expect(server.calls.length).toBe(0);
-    expect(result.stderr).toMatch(/local render.*SKIPPED.*bot wall/);
+    expect(server.calls.length).toBe(1);
+    expect(result.stderr).toMatch(/local render.*FALLBACK.*bot wall/);
   });
 
   test("CAESAR_DEBUG enables the diagnostics without --verbose", async () => {

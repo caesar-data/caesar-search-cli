@@ -42,17 +42,25 @@ export function isUnsandboxedRenderAllowed(): boolean {
   return env !== undefined && env !== "" && env !== "0" && env.toLowerCase() !== "false";
 }
 
-export function clientFromCommand(command: Command): ApiClient {
+// The global --timeout in milliseconds, or undefined when not passed. Shared by
+// the API client and the local-render path so ONE flag bounds a read regardless
+// of which path serves it.
+export function timeoutMsFromCommand(command: Command): number | undefined {
   const options = command.optsWithGlobals<GlobalOptions>();
   const timeoutMs = options.timeout ? Number(options.timeout) * 1000 : undefined;
   if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
     throw badInput("--timeout must be a positive number of seconds");
   }
+  return timeoutMs;
+}
+
+export function clientFromCommand(command: Command): ApiClient {
+  const options = command.optsWithGlobals<GlobalOptions>();
   return new ApiClient({
     key: options.key,
     baseUrl: options.baseUrl,
     retries: options.retry !== false,
-    timeoutMs,
+    timeoutMs: timeoutMsFromCommand(command),
   });
 }
 

@@ -27,7 +27,7 @@
     "AGENTS.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "bun build src/index.ts --target node --outfile dist/index.js && chmod +x dist/index.js",

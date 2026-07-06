@@ -22,6 +22,9 @@ interface RenderReport {
   elapsed_ms?: number;
   chars?: number;
   reason?: string;
+  // The browser's own stderr tail on launch failures — Chrome's actual
+  // complaint, so the operator debugs the real symptom, not a guess.
+  detail?: string;
   hint?: string;
 }
 
@@ -88,8 +91,14 @@ async function checkServer(baseUrl: string): Promise<ServerReport> {
 
 function renderHint(reason: string | undefined): string | undefined {
   if (reason === "no_local_chrome") return "Install Chrome/Chromium/Edge/Brave, or set CHROME_PATH.";
+  if (reason === "runtime_unsupported") {
+    return (
+      "This runtime has no built-in WebSocket, which the local render's CDP client needs (Node 22+ or Bun). " +
+      "Update Node, or reinstall via Homebrew or the curl installer (self-contained binaries)."
+    );
+  }
   if (reason === "browser_launch_failed") {
-    return "The detected browser binary could not be started; check that CHROME_PATH points at a runnable Chromium-family browser.";
+    return "The detected browser could not be started or never became reachable; check that CHROME_PATH points at a runnable Chromium-family browser.";
   }
   if (reason === "sandbox_unavailable") {
     // The env var alone is NOT enough for a plain read: each read also needs the
@@ -97,8 +106,9 @@ function renderHint(reason: string | undefined): string | undefined {
     return isUnsandboxedRenderAllowed()
       ? "The Chrome sandbox cannot launch here. CAESAR_ALLOW_UNSANDBOXED_RENDER is set, but a plain read also " +
           "needs the --allow-unsandboxed-render flag; without it every read falls back to the server."
-      : "The Chrome sandbox cannot launch here (container/root?). Set CAESAR_ALLOW_UNSANDBOXED_RENDER=1 and " +
-          "pass --allow-unsandboxed-render to read, or reads will use the server.";
+      : "Chrome reported its sandbox cannot initialize here (container/root?). Set " +
+          "CAESAR_ALLOW_UNSANDBOXED_RENDER=1 and pass --allow-unsandboxed-render to read, or reads will use " +
+          "the server. If the unsandboxed retry fails too, the sandbox is not the problem.";
   }
   return undefined;
 }
@@ -122,6 +132,9 @@ function renderDoctorHuman(payload: unknown): string {
   } else {
     const hint = report.local_render.hint ? ` — ${report.local_render.hint}` : "";
     lines.push(`local render  ${mark(false)} ${report.local_render.reason}${hint}`);
+    if (report.local_render.detail) {
+      lines.push(`              browser said: ${report.local_render.detail.slice(-300)}`);
+    }
   }
   if (report.server.reachable) {
     lines.push(`server        ${mark(true)} ${report.server.base_url} (HTTP ${report.server.status})`);
@@ -164,7 +177,13 @@ export function registerDoctor(program: Command): void {
             elapsed_ms: elapsedMs,
             chars: rendered.textLength,
           }
-        : { ok: false, url: CANARY_URL, reason: rendered.reason, hint: renderHint(rendered.reason) };
+        : {
+            ok: false,
+            url: CANARY_URL,
+            reason: rendered.reason,
+            detail: rendered.detail,
+            hint: renderHint(rendered.reason),
+          };
 
       const server = await checkServer(clientFromCommand(actionCommand).baseUrl);
 

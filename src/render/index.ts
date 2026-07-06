@@ -368,7 +368,9 @@ export interface RenderOptions {
 
 export type RenderResult =
   | { ok: true; markdown: string; title: string; finalUrl: string; textLength: number; strategy: string }
-  | { ok: false; reason: string };
+  // `detail` carries the browser's own stderr tail on launch failures, so doctor
+  // and --verbose can show Chrome's actual complaint instead of a guess.
+  | { ok: false; reason: string; detail?: string };
 
 // What the raw-HTML baseline fetch told us about this render, decided by
 // comparing the rendered DOM's element count against the pre-JS server HTML:
@@ -382,16 +384,21 @@ export type BaselineSignal = "hydrated" | "static" | "none";
 
 // Reject challenge interstitials and low-density shells so we only ever use a
 // render that actually contains the page's content. The whole-document density
-// floor exists to catch a JS shell we failed to render — but with a baseline in
-// hand we can tell that apart structurally ("hydrated" ran its JS, "static" had
-// nothing to run), so the floor applies only when the baseline is unavailable.
-// A genuinely tiny page (e.g. example.com) is a complete read, not a shell;
-// bouncing it to the server would pay for the same tiny document again.
+// floor exists to catch a JS shell that failed to render — and such a shell is
+// exactly a DOM that did NOT grow, so "static" alone must not waive the floor:
+// an unhydrated SPA shell and a genuinely tiny page are structurally identical
+// on the growth signal. What separates them is script: a script-free static
+// page cannot be waiting on JS, so what rendered is all there is; a static page
+// that ships scripts and still reads near-empty may be a shell whose JS never
+// produced content here, and the server (which crawls with its own renderer)
+// gets to decide. A genuinely tiny page (e.g. example.com) is a complete read,
+// not a shell; bouncing it to the server would pay for the same tiny document.
 function r2Validate(
   title: string,
   markdown: string,
   textLength: number,
   baseline: BaselineSignal,
+  rawHasScript: boolean,
 ): { ok: true } | { ok: false; reason: string } {
   const contentChars = markdown.replace(/\s+/g, " ").trim().length;
   if (isChallengeText(title, markdown, contentChars)) return { ok: false, reason: "challenge" };
@@ -400,9 +407,11 @@ function r2Validate(
   if (contentChars < MIN_MARKDOWN_CHARS) {
     return { ok: false, reason: `low_density(${contentChars})` };
   }
-  // Without a baseline, also enforce the fuller whole-document floor to reject
-  // static shells that carry only boilerplate.
-  if (baseline === "none" && textLength < minContentChars()) {
+  // The fuller whole-document floor applies when we have no baseline (fail
+  // closed) AND when the page is "static" but carries scripts (possible
+  // unhydrated shell). Only a script-free static page skips it.
+  const trustedSmall = baseline === "hydrated" || (baseline === "static" && !rawHasScript);
+  if (!trustedSmall && textLength < minContentChars()) {
     return { ok: false, reason: `low_density(${textLength})` };
   }
   return { ok: true };
@@ -428,9 +437,10 @@ function validateRender(
   markdown: string,
   textLength: number,
   baseline: BaselineSignal,
+  rawHasScript: boolean,
   httpStatus: number | undefined,
 ): { ok: false; reason: string } | null {
-  const validated = r2Validate(title, markdown, textLength, baseline);
+  const validated = r2Validate(title, markdown, textLength, baseline, rawHasScript);
   const statusFailure = httpStatusFailure(httpStatus);
   if (!validated.ok) {
     if (validated.reason !== "challenge" && statusFailure) return statusFailure;
@@ -627,45 +637,67 @@ async function waitForPortFile(
   throw new Error("chrome debugging port not ready");
 }
 
-// Resolve once the page has been quiet for `idleMs` with no in-flight requests,
-// or after `hardCapMs` regardless. Fires after Page.loadEventFired to let SPA
-// hydration and lazy fetches settle.
-function waitForNetworkIdle(cdp: CdpConnection, idleMs: number, hardCapMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    let inflight = 0;
-    let done = false;
-    let idleTimer: ReturnType<typeof setTimeout> | null = null;
-    let hardTimer: ReturnType<typeof setTimeout> | null = null;
-    const finish = (): void => {
-      if (done) return;
-      done = true;
-      if (idleTimer) clearTimeout(idleTimer);
-      // Clear the hard-cap timer too: when we finish early via the idle path it
-      // would otherwise stay pending (up to hardCapMs) and keep the process
-      // alive past the point the render is actually done.
-      if (hardTimer) clearTimeout(hardTimer);
-      resolve();
-    };
-    const scheduleIdle = (): void => {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(finish, idleMs);
-    };
-    cdp.on("Network.requestWillBeSent", () => {
-      inflight++;
-      if (idleTimer) {
-        clearTimeout(idleTimer);
-        idleTimer = null;
-      }
-    });
-    const settle = (): void => {
-      inflight = Math.max(0, inflight - 1);
-      if (inflight === 0) scheduleIdle();
-    };
-    cdp.on("Network.loadingFinished", settle);
-    cdp.on("Network.loadingFailed", settle);
-    scheduleIdle();
-    hardTimer = setTimeout(finish, hardCapMs);
-  });
+// Network-idle tracking. Counting MUST start when Network.enable does — before
+// navigation — because CDP never replays requestWillBeSent: a hydration fetch
+// already in flight when the load event fires would otherwise be invisible, the
+// idle timer would arm immediately, and extraction would run on the
+// pre-hydration shell. So the tracker attaches its listeners up front and
+// waitForIdle (called after load) resolves once the page has been quiet for
+// `idleMs` with no in-flight requests, or after `hardCapMs` regardless. Quiet
+// time already elapsed counts: a static page that finished loading with nothing
+// in flight does not pay the full idle window again.
+interface NetworkIdleTracker {
+  waitForIdle(idleMs: number, hardCapMs: number): Promise<void>;
+}
+
+function trackNetworkIdle(cdp: CdpConnection): NetworkIdleTracker {
+  let inflight = 0;
+  let lastActivity = Date.now();
+  let notify: (() => void) | null = null;
+  const bump = (delta: number): void => {
+    inflight = Math.max(0, inflight + delta);
+    lastActivity = Date.now();
+    notify?.();
+  };
+  cdp.on("Network.requestWillBeSent", () => bump(1));
+  cdp.on("Network.loadingFinished", () => bump(-1));
+  cdp.on("Network.loadingFailed", () => bump(-1));
+  return {
+    waitForIdle(idleMs, hardCapMs) {
+      return new Promise((resolve) => {
+        let done = false;
+        let idleTimer: ReturnType<typeof setTimeout> | null = null;
+        let hardTimer: ReturnType<typeof setTimeout> | null = null;
+        const finish = (): void => {
+          if (done) return;
+          done = true;
+          if (idleTimer) clearTimeout(idleTimer);
+          // Clear the hard-cap timer too: when we finish early via the idle
+          // path it would otherwise stay pending (up to hardCapMs) and keep the
+          // process alive past the point the render is actually done.
+          if (hardTimer) clearTimeout(hardTimer);
+          notify = null;
+          resolve();
+        };
+        const reschedule = (): void => {
+          if (idleTimer) {
+            clearTimeout(idleTimer);
+            idleTimer = null;
+          }
+          if (inflight > 0) return;
+          const quietFor = Date.now() - lastActivity;
+          if (quietFor >= idleMs) {
+            finish();
+            return;
+          }
+          idleTimer = setTimeout(finish, idleMs - quietFor);
+        };
+        notify = reschedule;
+        reschedule();
+        hardTimer = setTimeout(finish, hardCapMs);
+      });
+    },
+  };
 }
 
 // In-page DOM -> Markdown extractor, evaluated in the page via CDP. Written with
@@ -915,10 +947,20 @@ async function killChromeAndClean(proc: ReturnType<typeof spawn>, dir: string): 
   }
 }
 
+// Chrome's own stderr messages for a sandbox that cannot initialize. Only a
+// failure carrying one of these is a sandbox problem worth retrying without the
+// sandbox; everything else (wedged binary, missing shared library, port/WS
+// timeout) is not, and telling the user to disable the sandbox for it would
+// misdiagnose the machine.
+const SANDBOX_STDERR_PATTERN =
+  /no usable sandbox|suid sandbox|setuid sandbox|failed to move to new namespace|namespaces are not available|running as root without --no-sandbox/i;
+
 // Spawn Chrome and establish a CDP connection. Sandboxed by default: we render
 // untrusted pages, so the renderer sandbox stays on. Throws (after cleaning up
-// its own process/dir) if the browser fails to launch, letting the caller retry
-// unsandboxed for environments where the sandbox can't initialize.
+// its own process/dir) if the browser fails to launch: SandboxLaunchError when
+// Chrome's stderr names the sandbox as the culprit (the caller may retry
+// unsandboxed), BrowserSpawnError for a spawn-level failure, and
+// BrowserLaunchError (carrying the stderr tail) for everything else.
 async function connectChrome(chrome: string, sandbox: boolean, budgetMs: number): Promise<ChromeSession> {
   const dir = mkdtempSync(join(tmpdir(), "caesar-render-"));
   // Chrome 136 ignores --remote-debugging-port on the default profile, so a
@@ -929,7 +971,13 @@ async function connectChrome(chrome: string, sandbox: boolean, budgetMs: number)
   args.push("about:blank");
   // detached: Chrome becomes its own process-group leader so killChromeAndClean
   // can signal the whole group (parent + helper processes), not just the parent.
-  const proc = spawn(chrome, args, { stdio: "ignore", detached: true });
+  // stderr is piped (and always drained, so a chatty browser can't block on a
+  // full pipe) purely to classify launch failures by Chrome's own message.
+  const proc = spawn(chrome, args, { stdio: ["ignore", "ignore", "pipe"], detached: true });
+  let stderrTail = "";
+  proc.stderr?.on("data", (chunk: Buffer) => {
+    stderrTail = (stderrTail + String(chunk)).slice(-4096);
+  });
   // spawn failures (EACCES/ENOEXEC/ENOENT) surface as an async 'error' event;
   // without a listener that event is an uncaught exception under node, killing
   // the process before any server fallback can run. Capture it here and let the
@@ -953,7 +1001,12 @@ async function connectChrome(chrome: string, sandbox: boolean, budgetMs: number)
     return { proc, cdp, dir };
   } catch (error) {
     await killChromeAndClean(proc, dir);
-    throw error;
+    if (error instanceof BrowserSpawnError) throw error;
+    const tail = stderrTail.trim();
+    if (sandbox && SANDBOX_STDERR_PATTERN.test(tail)) {
+      throw new SandboxLaunchError(`chrome sandbox failed to initialize: ${tail.slice(-200)}`);
+    }
+    throw new BrowserLaunchError(error instanceof Error ? error.message : String(error), tail);
   }
 }
 
@@ -962,11 +1015,26 @@ async function connectChrome(chrome: string, sandbox: boolean, budgetMs: number)
 // untrusted page is never rendered without the sandbox by default.
 class SandboxUnavailableError extends Error {}
 
+// Thrown when the sandboxed launch failed with Chrome's own sandbox complaint on
+// stderr — the one launch failure a --no-sandbox retry can actually fix.
+class SandboxLaunchError extends Error {}
+
 // Thrown when the browser binary itself could not be started (spawn-level
 // failure). Retrying without the sandbox cannot help, and labeling it
 // sandbox_unavailable would misdiagnose the machine; renderLocally maps it to
 // its own reason so the read still falls back to the server.
 class BrowserSpawnError extends Error {}
+
+// Thrown when the browser launched but never became reachable (debugging port or
+// WebSocket never came up, or it exited without a sandbox complaint). Carries
+// the stderr tail so doctor/--verbose can show Chrome's actual message.
+class BrowserLaunchError extends Error {
+  readonly stderrTail: string;
+  constructor(message: string, stderrTail: string) {
+    super(message);
+    this.stderrTail = stderrTail;
+  }
+}
 
 async function runChrome(
   chrome: string,
@@ -991,16 +1059,16 @@ async function runChrome(
   // Prefer a sandboxed browser. If the sandbox itself cannot launch (e.g. running
   // as root, or a container without user namespaces), do NOT silently render an
   // untrusted page without it: unless the caller opted into --allow-unsandboxed-
-  // render, throw so renderLocally falls back to the server. A navigation/render
-  // failure (as opposed to a launch failure) is never retried here either.
+  // render, throw so renderLocally falls back to the server. Only a failure
+  // Chrome itself blames on the sandbox (SandboxLaunchError) earns the
+  // unsandboxed retry: any other launch failure would fail the same way again,
+  // so it propagates as-is instead of burning a second doomed launch.
   let session: ChromeSession;
   let unsandboxed = false;
   try {
     session = await connectChrome(chrome, true, remaining());
   } catch (err) {
-    // A spawn-level failure means the binary itself is unrunnable; retrying
-    // without the sandbox cannot help, so surface it as what it is.
-    if (err instanceof BrowserSpawnError) throw err;
+    if (!(err instanceof SandboxLaunchError)) throw err;
     if (!allowUnsandboxed) throw new SandboxUnavailableError();
     session = await connectChrome(chrome, false, remaining());
     unsandboxed = true;
@@ -1041,6 +1109,9 @@ async function runChrome(
       const sessionId = typeof attach.sessionId === "string" ? attach.sessionId : undefined;
       await cdp.send("Page.enable", {}, sessionId);
       await cdp.send("Network.enable", {}, sessionId);
+      // Attach the idle tracker before navigation so requests already in flight
+      // when the load event fires are counted (CDP never replays events).
+      const network = trackNetworkIdle(cdp);
       // Contain the network at the point the browser actually connects: validate
       // the main frame, every redirect hop, and every subresource. A request to a
       // blocked private/local target is aborted; a blocked main-document request
@@ -1151,7 +1222,7 @@ async function runChrome(
           httpStatus: mainDocStatus(),
         };
       }
-      await waitForNetworkIdle(cdp, 500, Math.min(8000, remaining()));
+      await network.waitForIdle(500, Math.min(8000, remaining()));
       // Define window.Readability in the page so the extractor can run its
       // scoring pass. The source no-ops its CommonJS export guard in a browser.
       await cdp.send("Runtime.evaluate", { expression: READABILITY_SRC }, sessionId);
@@ -1202,6 +1273,7 @@ interface FixtureShape {
   finalUrl?: unknown;
   hydrated?: unknown;
   baseline?: unknown;
+  rawHasScript?: unknown;
   httpStatus?: unknown;
 }
 
@@ -1227,6 +1299,7 @@ function renderFromFixture(path: string, url: string): RenderResult {
     markdown,
     textLength,
     baseline,
+    fixture.rawHasScript === true,
     typeof fixture.httpStatus === "number" ? fixture.httpStatus : undefined,
   );
   if (failure) return failure;
@@ -1240,10 +1313,20 @@ function countHtmlElements(html: string): number {
   return matches ? matches.length : 0;
 }
 
-// Fetch the raw (pre-JS) server HTML and return its element count, or 0 on any
-// failure. This is the baseline the rendered DOM is compared against to detect
-// client-side hydration. It is a plain origin fetch, so it never touches our own
-// server and costs nothing to the read pipeline's budget. The caller owns the
+// What the raw (pre-JS) server HTML looked like. `elemCount` feeds the hydration
+// growth signal; `hasScript` records whether the page ships ANY JavaScript,
+// which is what separates a genuinely tiny static page (script-free: what
+// rendered is all there is) from a possible unhydrated shell (scripts present
+// but the DOM never grew). null when the baseline fetch failed.
+interface RawBaseline {
+  elemCount: number;
+  hasScript: boolean;
+}
+
+// Fetch the raw (pre-JS) server HTML, or null on any failure. This is the
+// baseline the rendered DOM is compared against to detect client-side
+// hydration. It is a plain origin fetch, so it never touches our own server and
+// costs nothing to the read pipeline's budget. The caller owns the
 // AbortController and cancels it once the render is done (or fails), so a slow or
 // hung origin can never hold the process open past the render.
 //
@@ -1251,18 +1334,25 @@ function countHtmlElements(html: string): number {
 // same trust boundary itself: the target must resolve to a public address, and
 // redirects are NOT followed (redirect: "manual") so it can't be steered to a
 // private/local address. A blocked or redirecting origin just yields no baseline.
-async function fetchRawElementCount(url: string, allowLocal: boolean, signal: AbortSignal): Promise<number> {
+async function fetchRawBaseline(
+  url: string,
+  allowLocal: boolean,
+  signal: AbortSignal,
+): Promise<RawBaseline | null> {
   try {
-    if (!(await isRequestPermitted(url, allowLocal, new Map()))) return 0;
+    if (!(await isRequestPermitted(url, allowLocal, new Map()))) return null;
     const res = await fetch(url, {
       signal,
       redirect: "manual",
       headers: { "user-agent": RAW_FETCH_UA },
     });
-    if (!res.ok) return 0;
-    return countHtmlElements(await res.text());
+    if (!res.ok) return null;
+    const html = await res.text();
+    const elemCount = countHtmlElements(html);
+    if (elemCount === 0) return null;
+    return { elemCount, hasScript: /<script\b/i.test(html) };
   } catch {
-    return 0;
+    return null;
   }
 }
 
@@ -1279,6 +1369,14 @@ export async function renderLocally(url: string, opts: RenderOptions): Promise<R
     } catch {
       return { ok: false, reason: "render_failed" };
     }
+  }
+
+  // The CDP client needs the runtime's built-in WebSocket (Node >=22, Bun). On an
+  // older runtime, skip local render outright instead of spawning a Chrome we
+  // could never talk to — which would waste a launch and be misreported as a
+  // sandbox problem.
+  if (typeof WebSocket === "undefined") {
+    return { ok: false, reason: "runtime_unsupported" };
   }
 
   // Defense-in-depth: never navigate (or raw-fetch) a non-public target, even if
@@ -1298,7 +1396,7 @@ export async function renderLocally(url: string, opts: RenderOptions): Promise<R
   // fetch never holds the process open.
   const allowLocal = opts.allowLocalAddresses === true;
   const rawController = new AbortController();
-  const rawCountPromise = fetchRawElementCount(url, allowLocal, rawController.signal);
+  const rawBaselinePromise = fetchRawBaseline(url, allowLocal, rawController.signal);
 
   try {
     const rendered = await runChrome(chrome, url, timeoutMs, opts.allowUnsandboxed === true, allowLocal);
@@ -1307,23 +1405,24 @@ export async function renderLocally(url: string, opts: RenderOptions): Promise<R
       rawController.abort();
       return { ok: false, reason: "challenge" };
     }
-    const rawCount = await raceValue(rawCountPromise, RAW_FETCH_GRACE_MS, 0);
+    const raw = await raceValue(rawBaselinePromise, RAW_FETCH_GRACE_MS, null);
     rawController.abort();
     // A rendered DOM materially larger than the raw server HTML means JS built
     // the page ("hydrated"): trust the render even when it is text-sparse. A DOM
-    // that did NOT grow means the page is static and fully captured ("static") —
-    // also trustworthy, however short. No baseline → fail closed on density.
-    const baseline: BaselineSignal =
-      rawCount > 0
-        ? (rendered.elemCount - rawCount) / rawCount > HYDRATION_GROWTH_RATIO
-          ? "hydrated"
-          : "static"
-        : "none";
+    // that did NOT grow means the render is what the server sent ("static") —
+    // trustworthy only if the page ships no JS that could still have been meant
+    // to run (see r2Validate). No baseline → fail closed on density.
+    const baseline: BaselineSignal = raw
+      ? (rendered.elemCount - raw.elemCount) / raw.elemCount > HYDRATION_GROWTH_RATIO
+        ? "hydrated"
+        : "static"
+      : "none";
     const failure = validateRender(
       rendered.title,
       rendered.markdown,
       rendered.textLength,
       baseline,
+      raw?.hasScript ?? false,
       rendered.httpStatus,
     );
     if (failure) return failure;
@@ -1345,6 +1444,12 @@ export async function renderLocally(url: string, opts: RenderOptions): Promise<R
     // The browser binary itself could not be started (spawn failure): distinct
     // from a sandbox problem, and still a plain server fallback for the caller.
     if (err instanceof BrowserSpawnError) return { ok: false, reason: "browser_launch_failed" };
+    // The browser launched but never became reachable, for a reason Chrome did
+    // NOT blame on the sandbox. Same fallback, but carry Chrome's stderr tail so
+    // doctor/--verbose can show the actual complaint.
+    if (err instanceof BrowserLaunchError) {
+      return { ok: false, reason: "browser_launch_failed", detail: err.stderrTail || undefined };
+    }
     // The MAIN document resolved or redirected to a blocked private/local
     // address — do not fall back to the server (it would re-follow the URL).
     if (err instanceof BlockedRequestError) return { ok: false, reason: "blocked_address" };
