@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { storedKeyFromKeychain } from "./auth/keystore";
 import { registerApi } from "./commands/api";
 import { registerAuth } from "./commands/auth";
 import { registerCompletion } from "./commands/completion";
@@ -7,11 +8,15 @@ import { registerFeedback } from "./commands/feedback";
 import { registerRead } from "./commands/read";
 import { registerSearch } from "./commands/search";
 import { registerUpdate } from "./commands/update";
+import { setKeychainLookup } from "./config";
 import { EXIT_BAD_INPUT } from "./output/exit";
 import { emitData, emitError } from "./output/render";
 import { BUILD_DATE, COMMIT, VERSION } from "./version";
 
 export function buildProgram(): Command {
+  // Stored-credential resolution consults the OS keychain (browser-login
+  // keys) between CAESAR_API_KEY and the config file.
+  setKeychainLookup(storedKeyFromKeychain);
   const program = new Command();
   program
     .name("caesar-search")
@@ -34,8 +39,9 @@ Exit codes:
   0 success   2 bad input   3 auth error   4 API error   5 timeout
 
 Environment:
-  CAESAR_API_KEY    API key (or use: caesar-search auth login)
+  CAESAR_API_KEY    API key (or use: caesar-search auth login — opens a browser)
   CAESAR_BASE_URL   API base URL
+  CAESAR_KEYSTORE   stored-key backend: auto (default), keychain, file
   NO_COLOR          disable color output`,
     );
 

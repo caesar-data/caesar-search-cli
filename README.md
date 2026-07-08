@@ -6,7 +6,7 @@ CLI for the [Caesar](https://github.com/caesar-data) search API — web search w
 
 ```sh
 npm install -g caesar-search-cli        # or: brew install caesar-data/tap/caesar-search
-export CAESAR_API_KEY=...               # required (get one at app.trycaesar.com)
+caesar-search auth login                # browser login (or: export CAESAR_API_KEY=...)
 caesar-search search "rust async runtime comparison" --json | jq -r '.results[0].doc_id'
 caesar-search read <doc_id-or-url> --query "what changed"
 caesar-search feedback --event-type result_helpful --doc-id <doc_id>
@@ -27,7 +27,7 @@ caesar-search feedback --event-type result_helpful --doc-id <doc_id>
 caesar-search search <query|->     web search; --mode --max-results --format
 caesar-search read <url|doc_id|->  read a page as markdown; --query --max-chars --start-char (aliases: fetch, extract)
 caesar-search feedback             send result feedback; --event-type --search-id --doc-id
-caesar-search auth status|login|logout
+caesar-search auth status|login|logout  login opens a browser; --device for SSH; --key for direct entry
 caesar-search config get|set|unset|list|path
 caesar-search api <method> <path>  authenticated raw API call (escape hatch)
 caesar-search completion bash|zsh|fish
@@ -54,7 +54,17 @@ binary in place after sha256 verification). `update --check --json` reports
 
 ## Configuration
 
-Key resolution order: `--key` flag → `CAESAR_API_KEY` → `~/.config/caesar/config.json` (0600, written by `auth login`). Base URL: `--base-url` → `CAESAR_BASE_URL` → config → default. Keys are never logged and are masked in output.
+Key resolution order: `--key` flag → `CAESAR_API_KEY` → OS keychain → `~/.config/caesar/config.json` (0600). Base URL: `--base-url` → `CAESAR_BASE_URL` → config → default. Keys are never logged and are masked in output.
+
+### Authentication
+
+`caesar-search auth login` opens your browser, completes an OAuth (PKCE) login, and stores a named, revocable API key in the OS keychain (macOS Keychain / libsecret; 0600 config-file fallback, or `--insecure-storage` to force the file). The key is visible and revocable in the console. Variants:
+
+- `auth login --device` — SSH/containers/headless: shows a short code to approve on any device.
+- `auth login --key -` — pipe a key from a secret manager (stores to the config file, unchanged from 0.2).
+- `CAESAR_API_KEY` — no stored state; ideal for CI.
+
+Browser login needs the OAuth endpoints configured (baked into released builds; override with `CAESAR_OAUTH_ISSUER`, `CAESAR_OAUTH_CLIENT_ID`, `CAESAR_CONSOLE_URL`, or the matching `config set` keys). Without them, `auth login` falls back to the hidden paste prompt.
 
 ## For agents
 

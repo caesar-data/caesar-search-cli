@@ -4,7 +4,7 @@ import { badInput } from "../output/exit";
 import { emitData } from "../output/render";
 import { outputOptions } from "./common";
 
-const KEYS: (keyof CliConfig)[] = ["api_key", "base_url"];
+const KEYS: (keyof CliConfig)[] = ["api_key", "base_url", "oauth_issuer", "oauth_client_id", "console_url"];
 
 function assertKey(key: string): keyof CliConfig {
   if (!KEYS.includes(key as keyof CliConfig)) {

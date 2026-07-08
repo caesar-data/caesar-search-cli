@@ -5,6 +5,11 @@ import { dirname, join } from "node:path";
 export interface CliConfig {
   api_key?: string;
   base_url?: string;
+  // Browser/device login (OAuth) settings. Unset means browser login is
+  // not configured and `auth login` falls back to the paste prompt.
+  oauth_issuer?: string;
+  oauth_client_id?: string;
+  console_url?: string;
 }
 
 export const DEFAULT_BASE_URL = "https://alpha.api.trycaesar.com";
@@ -42,18 +47,37 @@ export function deleteConfigKey(key: keyof CliConfig): void {
   writeConfig(config);
 }
 
-export type KeySource = "flag" | "env" | "config" | "none";
+export type KeySource = "flag" | "env" | "keychain" | "config" | "none";
 
 export interface ResolvedAuth {
   key: string | undefined;
   source: KeySource;
 }
 
-// Precedence: --key flag > CAESAR_API_KEY > config file.
+// Precedence: --key flag > CAESAR_API_KEY > stored credential (OS keychain,
+// then config file). The keychain lookup shells out, so cache it per process.
+let keychainLookup: (() => string | undefined) | undefined;
+let keychainCached: { value: string | undefined } | undefined;
+
+// setKeychainLookup wires the keystore module in (avoids a config<->keystore
+// import cycle); cleared cache keeps `auth login` output honest in-process.
+export function setKeychainLookup(lookup: () => string | undefined): void {
+  keychainLookup = lookup;
+  keychainCached = undefined;
+}
+
+function keychainKey(): string | undefined {
+  if (!keychainLookup) return undefined;
+  keychainCached ??= { value: keychainLookup() };
+  return keychainCached.value;
+}
+
 export function resolveKey(flagKey?: string): ResolvedAuth {
   if (flagKey && flagKey.length > 0) return { key: flagKey, source: "flag" };
   const env = process.env.CAESAR_API_KEY;
   if (env && env.length > 0) return { key: env, source: "env" };
+  const keychain = keychainKey();
+  if (keychain && keychain.length > 0) return { key: keychain, source: "keychain" };
   const config = readConfig();
   if (config.api_key && config.api_key.length > 0) return { key: config.api_key, source: "config" };
   return { key: undefined, source: "none" };
@@ -76,4 +100,37 @@ export function isPublicBaseUrl(baseUrl: string): boolean {
 export function maskKey(key: string): string {
   if (key.length <= 8) return "****";
   return `${key.slice(0, 8)}…${key.slice(-4)}`;
+}
+
+export interface OAuthLoginConfig {
+  issuer: string;
+  clientId: string;
+  consoleUrl: string;
+  // Optional RFC 8707 resource indicator sent on authorize/token; defaults
+  // to the console URL (the audience the minted access token is used at).
+  resource?: string;
+}
+
+// resolveOAuthConfig returns the browser/device-login settings when fully
+// configured (env over config file), or undefined when browser login is not
+// available and `auth login` should fall back to the paste prompt.
+export function resolveOAuthConfig(): OAuthLoginConfig | undefined {
+  const config = readConfig();
+  const issuer = firstNonEmpty(process.env.CAESAR_OAUTH_ISSUER, config.oauth_issuer);
+  const clientId = firstNonEmpty(process.env.CAESAR_OAUTH_CLIENT_ID, config.oauth_client_id);
+  const consoleUrl = firstNonEmpty(process.env.CAESAR_CONSOLE_URL, config.console_url);
+  if (!issuer || !clientId || !consoleUrl) return undefined;
+  return {
+    issuer: issuer.replace(/\/+$/, ""),
+    clientId,
+    consoleUrl: consoleUrl.replace(/\/+$/, ""),
+    resource: firstNonEmpty(process.env.CAESAR_OAUTH_RESOURCE) ?? undefined,
+  };
+}
+
+function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    if (value && value.length > 0) return value;
+  }
+  return undefined;
 }
