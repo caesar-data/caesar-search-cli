@@ -1035,16 +1035,6 @@
             },
             "description": "Insufficient prepaid balance."
           },
-          "402": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Insufficient prepaid balance."
-          },
           "403": {
             "content": {
               "application/json": {
@@ -1282,16 +1272,6 @@
               }
             },
             "description": "Missing or invalid API key."
-          },
-          "402": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Insufficient prepaid balance."
           },
           "402": {
             "content": {
