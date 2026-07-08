@@ -6,7 +6,7 @@ CLI for the [Caesar](https://github.com/caesar-data) search API — web search w
 
 ```sh
 npm install -g caesar-search-cli        # or: brew install caesar-data/tap/caesar-search
-export CAESAR_API_KEY=...               # optional: anonymous tier works without a key
+export CAESAR_API_KEY=...               # required (get one at app.trycaesar.com)
 caesar-search search "rust async runtime comparison" --json | jq -r '.results[0].doc_id'
 caesar-search read <doc_id-or-url> --query "what changed"
 caesar-search feedback --event-type result_helpful --doc-id <doc_id>

@@ -18,7 +18,7 @@ caesar-search feedback --event-type result_helpful --search-id $SID --doc-id $DI
 
 - `--format compact` is the token-efficient default choice for search-then-read loops; use `standard` when you need quotable passages and `full` when you need capture provenance.
 - A truncated `read` reports `content.truncated: true` and `content.start_char`/`char_count`; continue with `--start-char <start+count>` instead of retrying with a bigger `--max-chars`.
-- Keys: set `CAESAR_API_KEY`. Never paste literal keys into config files or shell history; use `caesar-search auth login --key -` fed from a secret manager. Anonymous access works at a lower rate limit when the deployment allows it.
+- Keys: set `CAESAR_API_KEY`. Never paste literal keys into config files or shell history; use `caesar-search auth login --key -` fed from a secret manager.
 - Provenance fields (`doc_id`, `search_id`, `capture_id`, `canonical_url` vs `source_url`, crawl/freshness dates) are stable handles — thread them between commands and cite them.
 
 ## Common mistakes
