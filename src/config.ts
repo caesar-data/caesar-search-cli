@@ -111,26 +111,40 @@ export interface OAuthLoginConfig {
   resource?: string;
 }
 
-// resolveOAuthConfig returns the browser/device-login settings when fully
-// configured (env over config file), or undefined when browser login is not
-// available and `auth login` should fall back to the paste prompt.
+// Production browser-login endpoints, baked so `auth login` works out of the
+// box: the WorkOS Connect issuer (AuthKit domain), the CLI's public OAuth
+// client, and the console API that mints keys.
+export const DEFAULT_OAUTH_ISSUER = "https://ui.auth.trycaesar.com";
+export const DEFAULT_OAUTH_CLIENT_ID = "client_01KX1GGQVTQF42N91HENAXZEE2";
+export const DEFAULT_CONSOLE_URL = "https://api.app.trycaesar.com";
+
+// resolveOAuthConfig returns the browser/device-login settings: env over
+// config file over baked production defaults. Setting any of the env vars
+// to an empty string explicitly disables browser login (undefined return),
+// and `auth login` falls back to the paste prompt.
 export function resolveOAuthConfig(): OAuthLoginConfig | undefined {
   const config = readConfig();
-  const issuer = firstNonEmpty(process.env.CAESAR_OAUTH_ISSUER, config.oauth_issuer);
-  const clientId = firstNonEmpty(process.env.CAESAR_OAUTH_CLIENT_ID, config.oauth_client_id);
-  const consoleUrl = firstNonEmpty(process.env.CAESAR_CONSOLE_URL, config.console_url);
+  const issuer = oauthSetting("CAESAR_OAUTH_ISSUER", config.oauth_issuer, DEFAULT_OAUTH_ISSUER);
+  const clientId = oauthSetting("CAESAR_OAUTH_CLIENT_ID", config.oauth_client_id, DEFAULT_OAUTH_CLIENT_ID);
+  const consoleUrl = oauthSetting("CAESAR_CONSOLE_URL", config.console_url, DEFAULT_CONSOLE_URL);
   if (!issuer || !clientId || !consoleUrl) return undefined;
+  const resource = process.env.CAESAR_OAUTH_RESOURCE;
   return {
     issuer: issuer.replace(/\/+$/, ""),
     clientId,
     consoleUrl: consoleUrl.replace(/\/+$/, ""),
-    resource: firstNonEmpty(process.env.CAESAR_OAUTH_RESOURCE) ?? undefined,
+    resource: resource && resource.length > 0 ? resource : undefined,
   };
 }
 
-function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
-  for (const value of values) {
-    if (value && value.length > 0) return value;
-  }
-  return undefined;
+// Env set (even empty) wins — empty meaning "off"; else config; else default.
+function oauthSetting(
+  envName: string,
+  configValue: string | undefined,
+  fallback: string,
+): string | undefined {
+  const env = process.env[envName];
+  if (env !== undefined) return env.length > 0 ? env : undefined;
+  if (configValue && configValue.length > 0) return configValue;
+  return fallback;
 }

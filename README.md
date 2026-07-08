@@ -64,7 +64,7 @@ Key resolution order: `--key` flag → `CAESAR_API_KEY` → OS keychain → `~/.
 - `auth login --key -` — pipe a key from a secret manager (stores to the config file, unchanged from 0.2).
 - `CAESAR_API_KEY` — no stored state; ideal for CI.
 
-Browser login needs the OAuth endpoints configured (baked into released builds; override with `CAESAR_OAUTH_ISSUER`, `CAESAR_OAUTH_CLIENT_ID`, `CAESAR_CONSOLE_URL`, or the matching `config set` keys). Without them, `auth login` falls back to the hidden paste prompt.
+Browser login uses the production endpoints out of the box; override with `CAESAR_OAUTH_ISSUER`, `CAESAR_OAUTH_CLIENT_ID`, `CAESAR_CONSOLE_URL`, or the matching `config set` keys. Setting any of those env vars to an empty string disables browser login, and `auth login` falls back to the hidden paste prompt.
 
 ## For agents
 

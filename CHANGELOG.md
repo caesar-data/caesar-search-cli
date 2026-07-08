@@ -6,7 +6,7 @@
 - `auth login --device` (RFC 8628) for SSH/containers/headless machines: approve with a short code on any browser.
 - The paste paths are unchanged: `--key <key>`, `--key -` from a secret manager, and the hidden prompt (used automatically when browser login is not configured). `CAESAR_API_KEY` and `--key` precedence are unchanged; the keychain slots in between env and config file.
 - `auth logout` clears the stored key from the keychain and the config file.
-- New config keys `oauth_issuer`, `oauth_client_id`, `console_url` (env: `CAESAR_OAUTH_ISSUER`, `CAESAR_OAUTH_CLIENT_ID`, `CAESAR_CONSOLE_URL`) configure browser login.
+- Browser login works out of the box against the production endpoints; override with config keys `oauth_issuer`, `oauth_client_id`, `console_url` or env (`CAESAR_OAUTH_ISSUER`, `CAESAR_OAUTH_CLIENT_ID`, `CAESAR_CONSOLE_URL`). Setting any of the env vars to an empty string disables browser login (paste prompt fallback).
 
 ## 0.2.0
 
