@@ -1,6 +1,8 @@
 import { createInterface } from "node:readline";
 import type { Command } from "commander";
-import { configPath, deleteConfigKey, maskKey, readConfig, resolveKey, writeConfig } from "../config";
+import { removeStoredKey, storeKey } from "../auth/keystore";
+import { browserLogin, deviceLogin, mintApiKey } from "../auth/oauth";
+import { configPath, maskKey, readConfig, resolveKey, resolveOAuthConfig, writeConfig } from "../config";
 import { badInput } from "../output/exit";
 import { emitData } from "../output/render";
 import { argOrStdin, clientFromCommand, outputOptions } from "./common";
@@ -20,6 +22,10 @@ async function promptHidden(question: string): Promise<string> {
   readline.close();
   process.stderr.write("\n");
   return answer.trim();
+}
+
+function statusLine(line: string): void {
+  process.stderr.write(`${line}\n`);
 }
 
 export function registerAuth(program: Command): void {
@@ -58,33 +64,79 @@ export function registerAuth(program: Command): void {
 
   auth
     .command("login")
-    .description("Store an API key in the config file (0600).")
+    .description(
+      "Log in via the browser and store a revocable API key (OS keychain, config-file fallback). " +
+        "Use --device on SSH/headless machines, or --key to store a key directly.",
+    )
     .option("--key <key>", "API key; use - to read from stdin")
+    .option("--device", "device login: approve on any browser, for SSH/headless machines")
+    .option("--no-open", "print the login URL instead of opening the browser")
+    .option("--insecure-storage", "store the key in the 0600 config file instead of the OS keychain")
     .action(async (options, command: Command) => {
       // --key may be captured by the global option of the same name.
       const provided: string | undefined = options.key ?? command.optsWithGlobals<{ key?: string }>().key;
-      let key: string;
+      const forceFile = options.insecureStorage === true;
+
+      // Paste path (unchanged 0.2 contract): --key <key> / --key - / prompt
+      // stores to the 0600 config file. The keychain is used for
+      // browser/device-minted credentials below.
       if (provided) {
-        key = await argOrStdin(provided, "API key");
-      } else {
-        key = await promptHidden("Paste your Caesar API key: ");
+        const key = await argOrStdin(provided, "API key");
+        storePastedKey(key, command);
+        return;
       }
-      if (key.length < 8) throw badInput("that does not look like an API key");
-      const config = readConfig();
-      config.api_key = key;
-      writeConfig(config);
+
+      const oauth = resolveOAuthConfig();
+      if (!oauth) {
+        // Browser login is not configured for this install; keep the
+        // pre-0.3 hidden prompt so `auth login` never dead-ends.
+        const key = await promptHidden("Paste your Caesar API key: ");
+        storePastedKey(key, command);
+        return;
+      }
+
+      const accessToken = options.device
+        ? await deviceLogin(oauth, statusLine)
+        : await browserLogin(oauth, statusLine, { openBrowser: options.open !== false });
+      statusLine("Login approved. Creating your CLI API key…");
+      const minted = await mintApiKey(oauth, accessToken);
+      // The access token is short-lived and now out of scope — only the
+      // named, revocable csk_ key is stored.
+      const storage = storeKey(minted.secret, { forceFile });
       emitData(
-        { stored: true, config_path: configPath(), key_masked: maskKey(key) },
+        {
+          stored: true,
+          key_name: minted.name,
+          key_masked: maskKey(minted.secret),
+          storage,
+          config_path: storage === "file" ? configPath() : undefined,
+        },
         outputOptions(command),
-        () => `stored key ${maskKey(key)} in ${configPath()}`,
+        () =>
+          [
+            `Logged in. Created API key "${minted.name}" and stored it in the ${storage === "keychain" ? "OS keychain" : `config file (${configPath()})`}.`,
+            `Manage or revoke it any time in the console.`,
+          ].join("\n"),
       );
     });
 
   auth
     .command("logout")
-    .description("Remove the stored API key from the config file.")
+    .description("Remove the stored API key (keychain and config file).")
     .action(async (_options, command: Command) => {
-      deleteConfigKey("api_key");
+      removeStoredKey();
       emitData({ removed: true }, outputOptions(command), () => "removed stored API key");
     });
+
+  function storePastedKey(key: string, command: Command): void {
+    if (key.length < 8) throw badInput("that does not look like an API key");
+    const config = readConfig();
+    config.api_key = key;
+    writeConfig(config);
+    emitData(
+      { stored: true, config_path: configPath(), key_masked: maskKey(key) },
+      outputOptions(command),
+      () => `stored key ${maskKey(key)} in ${configPath()}`,
+    );
+  }
 }

@@ -1,6 +1,6 @@
 {
   "name": "caesar-search-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "CLI for the Caesar search API — web search with provenance, built for agents and scripts.",
   "license": "MIT",
   "repository": {

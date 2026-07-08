@@ -20,6 +20,11 @@ export async function runCli(
       CAESAR_BASE_URL: "",
       XDG_CONFIG_HOME: mkdtempSync(join(tmpdir(), "caesar-cli-test-")),
       NO_COLOR: "1",
+      // Tests must never touch the developer's real OS keychain.
+      CAESAR_KEYSTORE: "file",
+      CAESAR_OAUTH_ISSUER: "",
+      CAESAR_OAUTH_CLIENT_ID: "",
+      CAESAR_CONSOLE_URL: "",
       ...options.env,
     },
     stdin: options.stdin !== undefined ? new TextEncoder().encode(options.stdin) : undefined,
