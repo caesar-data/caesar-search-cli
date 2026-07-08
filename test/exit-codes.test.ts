@@ -33,6 +33,22 @@ describe("exit codes", () => {
     expect(envelope.error.hint).toContain("auth login");
   });
 
+  test("3 on missing key before public API request", async () => {
+    const result = await runCli(["search", "x", "--json"]);
+    expect(result.code).toBe(3);
+    const envelope = JSON.parse(result.stderr);
+    expect(envelope.error.code).toBe("missing_api_key");
+    expect(envelope.error.message).toContain("CAESAR_API_KEY");
+  });
+
+  test("custom base URL without key bypasses local preflight", async () => {
+    const server = mockServer(() => ({ body: sampleSearchResponse }));
+    const result = await runCli(["search", "ok", "--json"], { env: { CAESAR_BASE_URL: server.url } });
+    server.stop();
+    expect(result.code).toBe(0);
+    expect(server.calls[0]?.headers.authorization).toBeUndefined();
+  });
+
   test("4 on API 5xx after retries", async () => {
     const server = mockServer(() => ({
       status: 500,

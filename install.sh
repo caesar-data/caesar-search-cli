@@ -19,12 +19,15 @@ case "$arch" in
   *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
 esac
 
-tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)"
-[ -n "$tag" ] || { echo "could not determine latest release" >&2; exit 1; }
+tag="${CAESAR_RELEASE_TAG:-}"
+if [ -z "$tag" ]; then
+  tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)"
+  [ -n "$tag" ] || { echo "could not determine latest release" >&2; exit 1; }
+fi
 version="${tag#v}"
 
 archive="caesar-search_${version}_${platform}_${cpu}.tar.gz"
-base="https://github.com/$REPO/releases/download/$tag"
+base="${CAESAR_RELEASE_BASE_URL:-https://github.com/$REPO/releases/download/$tag}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

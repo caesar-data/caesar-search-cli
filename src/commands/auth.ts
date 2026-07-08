@@ -30,7 +30,7 @@ export function registerAuth(program: Command): void {
     .description("Show key source, masked key, and API reachability.")
     .action(async (_options, command: Command) => {
       const resolved = resolveKey(command.optsWithGlobals<{ key?: string }>().key);
-      const client = clientFromCommand(command);
+      const client = clientFromCommand(command, { requireKey: false });
       let reachable = false;
       try {
         await client.get("/up");

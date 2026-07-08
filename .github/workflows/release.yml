@@ -17,6 +17,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
       - uses: anchore/sbom-action/download-syft@v0
       - run: bun install --frozen-lockfile
       - run: bun test
@@ -42,6 +44,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
       # No registry-url here: setup-node would write an .npmrc with a
       # placeholder NODE_AUTH_TOKEN, which makes npm take the token auth path
       # and skip OIDC trusted publishing entirely.

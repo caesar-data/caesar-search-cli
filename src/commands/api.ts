@@ -35,7 +35,7 @@ Examples:
       if (!METHODS.includes(method)) throw badInput(`method must be one of: ${METHODS.join(", ")}`);
       if (!path.startsWith("/")) throw badInput("path must start with /");
       const body = await readBody(options.input);
-      const client = clientFromCommand(command);
+      const client = clientFromCommand(command, { requireKey: false });
       const { body: response } = await client.request(method, path, body);
       // Raw API output is always JSON, with or without --json.
       emitData(response, { ...outputOptions(command), json: true }, () => "");

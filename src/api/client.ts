@@ -1,4 +1,4 @@
-import { resolveBaseUrl, resolveKey } from "../config";
+import { isPublicBaseUrl, resolveBaseUrl, resolveKey } from "../config";
 import { CliError, EXIT_API, EXIT_AUTH, EXIT_TIMEOUT } from "../output/exit";
 import { VERSION } from "../version";
 
@@ -7,6 +7,7 @@ export interface ClientOptions {
   baseUrl?: string;
   retries?: boolean;
   timeoutMs?: number;
+  requireKey?: boolean;
 }
 
 export interface ApiErrorBody {
@@ -43,6 +44,14 @@ export class ApiClient {
   constructor(options: ClientOptions = {}) {
     this.baseUrl = resolveBaseUrl(options.baseUrl);
     this.key = resolveKey(options.key).key;
+    if (options.requireKey === true && !this.key && isPublicBaseUrl(this.baseUrl)) {
+      throw new CliError(
+        "missing_api_key",
+        "missing or invalid API key — set CAESAR_API_KEY",
+        EXIT_AUTH,
+        "Set CAESAR_API_KEY or run: caesar-search auth login",
+      );
+    }
     this.retries = options.retries ?? true;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }

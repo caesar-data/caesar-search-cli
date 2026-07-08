@@ -461,8 +461,6 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Optional bearer token for keyed access. Omit this header for anonymous access. */
-                Authorization?: string;
                 /** @description Optional client session identifier. */
                 "X-Session-ID"?: string;
             };
@@ -493,7 +491,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Invalid API key, or missing API key when keyless access is disabled. */
+            /** @description Missing or invalid API key. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -571,8 +569,6 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Optional bearer token for keyed access. Omit this header for anonymous access. */
-                Authorization?: string;
                 /** @description Optional client session identifier. */
                 "X-Session-ID"?: string;
             };
@@ -603,7 +599,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Invalid API key, or missing API key when keyless access is disabled. */
+            /** @description Missing or invalid API key. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -654,8 +650,6 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Optional bearer token for keyed access. Omit this header for anonymous access. */
-                Authorization?: string;
                 /** @description Optional client session identifier. */
                 "X-Session-ID"?: string;
             };
@@ -686,7 +680,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description Invalid API key, or missing API key when keyless access is disabled. */
+            /** @description Missing or invalid API key. */
             401: {
                 headers: {
                     [name: string]: unknown;

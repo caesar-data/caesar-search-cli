@@ -69,6 +69,10 @@ export function resolveBaseUrl(flagUrl?: string): string {
   return DEFAULT_BASE_URL;
 }
 
+export function isPublicBaseUrl(baseUrl: string): boolean {
+  return baseUrl.replace(/\/+$/, "") === DEFAULT_BASE_URL;
+}
+
 export function maskKey(key: string): string {
   if (key.length <= 8) return "****";
   return `${key.slice(0, 8)}…${key.slice(-4)}`;

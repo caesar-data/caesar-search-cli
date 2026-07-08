@@ -14,7 +14,7 @@ export interface GlobalOptions {
   timeout?: string;
 }
 
-export function clientFromCommand(command: Command): ApiClient {
+export function clientFromCommand(command: Command, clientOptions: { requireKey?: boolean } = {}): ApiClient {
   const options = command.optsWithGlobals<GlobalOptions>();
   const timeoutMs = options.timeout ? Number(options.timeout) * 1000 : undefined;
   if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
@@ -25,6 +25,7 @@ export function clientFromCommand(command: Command): ApiClient {
     baseUrl: options.baseUrl,
     retries: options.retry !== false,
     timeoutMs,
+    requireKey: clientOptions.requireKey ?? true,
   });
 }
 
