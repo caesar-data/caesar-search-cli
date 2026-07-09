@@ -52,7 +52,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm install -g npm@latest
+      # Use Node 24's bundled npm (>= 11.6, supports OIDC trusted publishing).
+      # `npm install -g npm@latest` self-upgrades to a build whose bundled
+      # sigstore is missing, breaking provenance during publish
+      # (Cannot find module 'sigstore').
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: npm publish --access public
