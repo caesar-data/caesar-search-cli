@@ -354,11 +354,11 @@ export interface components {
              */
             max_results: number;
             /**
-             * @description Retrieval budget and ranking mode: fast skips the reranking stage for the lowest latency; standard (default) and research rerank results, with research spending the largest retrieval budget.
+             * @description Retrieval budget and ranking mode: standard (default) and research both rerank results, with research spending the largest retrieval budget.
              * @default standard
              * @enum {string}
              */
-            mode: "fast" | "standard" | "research";
+            mode: "standard" | "research";
             /**
              * @description The search query, phrased as the user or agent would ask it. Drives ranking and passage selection even when search_queries supplies a rewrite.
              * @example linux kernel amd gpu suspend

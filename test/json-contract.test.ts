@@ -19,13 +19,13 @@ describe("json output contract", () => {
   test("search request body maps flags to the public contract", async () => {
     const server = mockServer(() => ({ body: sampleSearchResponse }));
     await runCli(
-      ["search", "test query", "--json", "--mode", "fast", "--max-results", "7", "--format", "compact"],
+      ["search", "test query", "--json", "--mode", "research", "--max-results", "7", "--format", "compact"],
       { env: { CAESAR_BASE_URL: server.url } },
     );
     server.stop();
     const body = server.calls[0]?.body as Record<string, unknown>;
     expect(body.query).toBe("test query");
-    expect(body.mode).toBe("fast");
+    expect(body.mode).toBe("research");
     expect(body.max_results).toBe(7);
     expect(body.response).toEqual({ verbosity: "compact" });
     expect(body.client_model).toBe("cli");
