@@ -7,7 +7,7 @@
   "rules": [
     "Always pass --json for machine output; parse stdout as JSON and stderr error envelopes",
     "Branch on exit codes: 0 ok, 2 bad input, 3 auth, 4 API error, 5 timeout",
-    "The flag is --max-results (not --results or --limit); modes are fast|standard|research",
+    "The flag is --max-results (not --results or --limit); modes are standard|research",
     "Continue truncated reads with --start-char instead of increasing --max-chars",
     "Set CAESAR_API_KEY; never paste literal keys into configs or shell history"
   ]

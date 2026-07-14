@@ -27,7 +27,7 @@ caesar-search feedback --event-type result_helpful --search-id $SID --doc-id $DI
 |---|---|
 | `--results`, `--limit`, `-n` | The flag is `--max-results` |
 | `--response-format` | The flag is `--format` (values: ids_only, compact, standard, full) |
-| `--mode deep` / `--mode quick` | Modes are exactly `fast`, `standard`, `research` |
+| `--mode deep` / `--mode quick` | Modes are exactly `standard`, `research` |
 | Passing a bare domain to `read` | `read` needs a full URL (`https://…`) or a `doc_id` UUID |
 | Retrying a truncated read with bigger `--max-chars` | Use `--start-char` to continue from where it stopped |
 | Parsing human output | Use `--json`; human output is not a stable interface |
