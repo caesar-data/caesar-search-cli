@@ -435,8 +435,6 @@ export interface components {
         };
         Usage: {
             /** Format: int64 */
-            approx_tokens: number;
-            /** Format: int64 */
             bytes_returned: number;
             /** Format: int64 */
             requests: number;

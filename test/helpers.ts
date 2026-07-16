@@ -120,5 +120,5 @@ export const sampleSearchResponse = {
       ],
     },
   ],
-  usage: { requests: 1, bytes_returned: 1000, approx_tokens: 250 },
+  usage: { requests: 1, bytes_returned: 1000 },
 };
