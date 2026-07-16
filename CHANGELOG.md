@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+- Breaking: the search API no longer returns `usage.approx_tokens`; the CLI no longer displays approximate token counts.
+
 ## 0.3.0
 
 - `auth login` now opens the browser: an OAuth (PKCE, RFC 8252 loopback) login that mints a named, revocable API key ("CLI · hostname · date", visible in the console) and stores it in the OS keychain (macOS Keychain / libsecret), falling back to the 0600 config file. `--insecure-storage` forces the file.

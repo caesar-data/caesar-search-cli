@@ -80,7 +80,6 @@ interface SearchResponseLike {
   results?: SearchResultLike[];
   truncated?: boolean;
   warnings?: { code?: string; message?: string }[];
-  usage?: { approx_tokens?: number };
 }
 
 export function renderSearchHuman(payload: unknown): string {
