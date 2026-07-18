@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { badInput } from "../output/exit";
 
 const COMMANDS = "search read fetch extract feedback auth config api completion update version";
-const SEARCH_FLAGS = "--mode --max-results --format --json --output --key --base-url --no-retry --timeout";
+const SEARCH_FLAGS = "--max-results --format --json --output --key --base-url --no-retry --timeout";
 const READ_FLAGS =
   "--query --max-chars --start-char --include --json --output --key --base-url --no-retry --timeout";
 

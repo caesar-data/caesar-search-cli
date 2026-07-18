@@ -295,7 +295,6 @@ export interface components {
             text: string;
         };
         Ranking: {
-            mode: string;
             ranker_version: string;
             score_scope: string;
         };
@@ -352,12 +351,6 @@ export interface components {
              * @default 10
              */
             max_results: number;
-            /**
-             * @description Retrieval budget and ranking mode: standard (default) and research both rerank results, with research spending the largest retrieval budget.
-             * @default standard
-             * @enum {string}
-             */
-            mode: "standard" | "research";
             /**
              * @description The search query, phrased as the user or agent would ask it. Drives ranking and passage selection even when search_queries supplies a rewrite.
              * @example linux kernel amd gpu suspend
