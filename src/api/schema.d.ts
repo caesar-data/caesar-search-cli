@@ -70,7 +70,6 @@ export interface components {
     schemas: {
         Access: {
             rate_limit: components["schemas"]["RateLimit"];
-            tier: string;
         };
         CaptureHistoryEntry: {
             capture_id: string;
