@@ -9,12 +9,6 @@ describe("exit codes", () => {
     expect(result.code).toBe(0);
   });
 
-  test("2 on bad input (invalid mode)", async () => {
-    const result = await runCli(["search", "x", "--mode", "warp"]);
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("--mode");
-  });
-
   test("2 on unknown flag", async () => {
     const result = await runCli(["search", "x", "--frobnicate"]);
     expect(result.code).toBe(2);

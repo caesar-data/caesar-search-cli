@@ -98,7 +98,7 @@ export const sampleSearchResponse = {
   access: {
     rate_limit: { limit_rps: 100, remaining: 99, reset_at: "2026-06-12T00:00:00Z" },
   },
-  ranking: { mode: "standard", ranker_version: "reranked_v1", score_scope: "response_local" },
+  ranking: { ranker_version: "reranked_v1", score_scope: "response_local" },
   results: [
     {
       rank: 1,
