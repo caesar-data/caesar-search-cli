@@ -44,6 +44,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List uploaded files
+         * @description List the organization's uploaded files in its Files knowledge base.
+         */
+        get: operations["list-files"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Index uploaded files
+         * @description Start an indexing run over the organization's uploaded files so they become searchable in the workspace index. Poll GET /v1/files/index/{sync_id} for progress.
+         */
+        post: operations["index-files"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/index/{sync_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get indexing run status
+         * @description Progress and outcome of one files indexing run.
+         */
+        get: operations["get-files-index-status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/presign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a presigned upload URL
+         * @description Create a presigned S3 PUT URL for one file. Upload the raw bytes to the returned url with an HTTP PUT and no Authorization header; the body must be exactly the declared size. Then trigger POST /v1/files/index to make the file searchable via /v1/search with scope.indexes ["workspace"].
+         */
+        post: operations["presign-file-upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an uploaded file
+         * @description Delete one uploaded file by name. The document drops out of workspace search after the next indexing run (one is triggered automatically).
+         */
+        delete: operations["delete-file"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/research": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's research runs
+         * @description Return the caller's research jobs, most recent first. Lightweight: result bodies are omitted (fetch a job by id for its result).
+         */
+        get: operations["list-research"];
+        put?: never;
+        /**
+         * Start a research run
+         * @description Kick off an asynchronous deep-research run and return a job id to poll.
+         */
+        post: operations["start-research"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/research/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a research run's status and result
+         * @description Poll a research job; returns its status, plus the result when completed or the error when failed.
+         */
+        get: operations["get-research"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/search": {
         parameters: {
             query?: never;
@@ -64,6 +208,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/search/{search_id}/integration-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get stored integration results
+         * @description Retrieve integration records already acquired during a search without invoking providers again.
+         */
+        get: operations["get-search-integration-results"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -76,6 +240,12 @@ export interface components {
             capture_time: string;
             content_digest: string;
             content_format?: string;
+        };
+        Citation: {
+            /** Format: int64 */
+            index: number;
+            title: string;
+            url: string;
         };
         ContentRange: {
             /** @description Optional capture pin; a stale_range warning is returned when the latest capture differs. */
@@ -281,6 +451,204 @@ export interface components {
             session_id: string;
             usage?: components["schemas"]["Usage"];
         };
+        FileDeleteResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/FileDeleteResponse.json
+             */
+            readonly $schema?: string;
+            /** @description True when the file was removed. */
+            deleted: boolean;
+        };
+        FileIndexRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/FileIndexRequest.json
+             */
+            readonly $schema?: string;
+            /**
+             * @description Indexing mode. incremental (default) processes new and changed files; full reprocesses everything.
+             * @enum {string}
+             */
+            mode?: "full" | "incremental";
+        };
+        FileIndexResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/FileIndexResponse.json
+             */
+            readonly $schema?: string;
+            /** @description Initial run state. */
+            state: string;
+            /** @description Identifier of the accepted indexing run; poll GET /v1/files/index/{sync_id}. */
+            sync_id: string;
+        };
+        FileIndexStats: {
+            /**
+             * Format: int64
+             * @description Bytes fetched.
+             */
+            bytes: number;
+            /**
+             * Format: int64
+             * @description Documents removed because the object is gone.
+             */
+            deleted: number;
+            /**
+             * Format: int64
+             * @description Objects discovered.
+             */
+            enumerated: number;
+            /**
+             * Format: int64
+             * @description Objects that failed processing.
+             */
+            failed: number;
+            /**
+             * Format: int64
+             * @description Objects downloaded for extraction.
+             */
+            fetched: number;
+            /**
+             * Format: int64
+             * @description Documents now searchable.
+             */
+            indexed: number;
+            /**
+             * Format: int64
+             * @description Objects skipped as unsupported types.
+             */
+            skipped_unsupported: number;
+        };
+        FileIndexStatusResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/FileIndexStatusResponse.json
+             */
+            readonly $schema?: string;
+            /** @description Run completion time (RFC 3339), null while in flight. */
+            completed_at: string | null;
+            /** @description Terminal error detail, null while healthy. */
+            error: string | null;
+            /** @description Run start time (RFC 3339), null before it starts. */
+            started_at: string | null;
+            /** @description Run state (queued, planning, running, completed, failed, …). */
+            state: string;
+            /** @description Progress counters. */
+            stats: components["schemas"]["FileIndexStats"];
+            /** @description Indexing run identifier. */
+            sync_id: string;
+        };
+        FileListResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/FileListResponse.json
+             */
+            readonly $schema?: string;
+            /** @description The organization's uploaded files, newest first. */
+            files: components["schemas"]["FileSummary"][] | null;
+        };
+        FilePresignRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/FilePresignRequest.json
+             */
+            readonly $schema?: string;
+            /** @description Optional MIME type recorded on the object. */
+            content_type?: string;
+            /** @description Filename to upload. Sanitized server-side; the response echoes the stored name. */
+            filename: string;
+            /**
+             * Format: int64
+             * @description Exact file size in bytes. The presigned URL binds this length, so the PUT body must match it.
+             */
+            size: number;
+        };
+        FilePresignResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/FilePresignResponse.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Seconds until the presigned URL expires.
+             */
+            expires_in_seconds: number;
+            /**
+             * Format: int64
+             * @description Per-file upload size limit in bytes.
+             */
+            max_object_bytes: number;
+            /** @description Sanitized filename the upload will be stored and listed under. */
+            name: string;
+            /** @description Presigned S3 PUT URL. Upload the raw file bytes to this URL with an HTTP PUT (no Authorization header); the body must be exactly the declared size. */
+            url: string;
+        };
+        FileSummary: {
+            /** @description Upload time (RFC 3339). */
+            last_modified?: string;
+            /** @description Filename. */
+            name: string;
+            /**
+             * Format: int64
+             * @description Object size in bytes.
+             */
+            size: number;
+        };
+        IntegrationResultsResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/IntegrationResultsResponse.json
+             */
+            readonly $schema?: string;
+            access?: components["schemas"]["Access"];
+            next_cursor?: string;
+            request_id: string;
+            results: components["schemas"]["IntegrationSearchResult"][] | null;
+            search_id: string;
+            /** Format: int64 */
+            total: number;
+            usage?: components["schemas"]["Usage"];
+        };
+        IntegrationResultsSummary: {
+            href: string;
+            /** Format: int64 */
+            selected: number;
+            /** Format: int64 */
+            total: number;
+        };
+        IntegrationSearchResult: {
+            canonical_url: string;
+            description?: string;
+            doc_id: string;
+            index?: string;
+            integration: string;
+            labels?: string[] | null;
+            metadata?: components["schemas"]["SearchResultMetadata"];
+            mime?: string;
+            operation: string;
+            passages?: components["schemas"]["Passage"][] | null;
+            /** Format: int64 */
+            primary_rank?: number;
+            provenance?: components["schemas"]["DocumentProvenance"];
+            /** Format: int64 */
+            rank: number;
+            score?: components["schemas"]["SearchScore"];
+            selected: boolean;
+            snippet?: string;
+            source_uri?: string;
+            source_url?: string;
+            title?: string;
+        };
         Passage: {
             /** Format: int64 */
             char_end?: number;
@@ -304,6 +672,96 @@ export interface components {
             /** Format: int64 */
             remaining: number;
             reset_at: string;
+        };
+        ResearchJobResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/ResearchJobResponse.json
+             */
+            readonly $schema?: string;
+            access?: components["schemas"]["Access"];
+            completed_at?: string;
+            created_at: string;
+            /** @description Present when status is failed. */
+            error?: string;
+            id: string;
+            request_id: string;
+            /** @description Present when status is completed. */
+            result?: components["schemas"]["ResearchResultResponse"];
+            /** @description queued, running, completed, or failed. */
+            status: string;
+        };
+        ResearchJobSummary: {
+            completed_at?: string;
+            created_at: string;
+            id: string;
+            query: string;
+            /** @description queued, running, completed, or failed. */
+            status: string;
+        };
+        ResearchListResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/ResearchListResponse.json
+             */
+            readonly $schema?: string;
+            access?: components["schemas"]["Access"];
+            jobs: components["schemas"]["ResearchJobSummary"][] | null;
+            request_id: string;
+        };
+        ResearchRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/ResearchRequest.json
+             */
+            readonly $schema?: string;
+            /** @description Domains to drop from results. */
+            excluded_domains?: string[] | null;
+            /**
+             * Format: int64
+             * @description Max tool calls (web_search/web_read/scratchpad) before a final answer is forced. Optional; defaults internally. The agent usually stops earlier on its own.
+             */
+            max_tool_calls?: number;
+            /** @description Research question to investigate. */
+            query: string;
+            /**
+             * Format: int64
+             * @description Per-source fetch timeout in seconds.
+             */
+            source_timeout?: number;
+        };
+        ResearchResultResponse: {
+            citations: components["schemas"]["Citation"][] | null;
+            confidence: string;
+            content: string;
+            failure_tool?: string;
+            /** Format: int64 */
+            failure_turn?: number;
+            /** Format: int64 */
+            llm_calls: number;
+            query: string;
+            /** Format: int64 */
+            read_count: number;
+            run_id?: string;
+            /** Format: int64 */
+            tool_calls_used: number;
+            tool_invocations?: components["schemas"]["ToolInvocation"][] | null;
+        };
+        ResearchStartResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/ResearchStartResponse.json
+             */
+            readonly $schema?: string;
+            access?: components["schemas"]["Access"];
+            /** @description Job id to poll at GET /v1/research/{id}. */
+            id: string;
+            request_id: string;
+            status: string;
         };
         ResponseBudget: {
             /**
@@ -380,6 +838,7 @@ export interface components {
              */
             readonly $schema?: string;
             access?: components["schemas"]["Access"];
+            integration_results?: components["schemas"]["IntegrationResultsSummary"];
             ranking?: components["schemas"]["Ranking"];
             request_id: string;
             results: components["schemas"]["SearchResult"][] | null;
@@ -394,13 +853,16 @@ export interface components {
             description?: string;
             doc_id: string;
             index?: string;
+            labels?: string[] | null;
             metadata?: components["schemas"]["SearchResultMetadata"];
+            mime?: string;
             passages?: components["schemas"]["Passage"][] | null;
             provenance?: components["schemas"]["DocumentProvenance"];
             /** Format: int64 */
             rank: number;
             score?: components["schemas"]["SearchScore"];
             snippet?: string;
+            source_uri?: string;
             source_url?: string;
             title?: string;
         };
@@ -424,6 +886,21 @@ export interface components {
         SearchScore: {
             /** Format: double */
             value: number;
+        };
+        ToolInvocation: {
+            error?: string;
+            /** Format: int64 */
+            latency_ms: number;
+            /** Format: int64 */
+            ordinal: number;
+            query?: string;
+            /** Format: int64 */
+            result_count: number;
+            status: string;
+            tool: string;
+            /** Format: int64 */
+            turn: number;
+            url?: string;
         };
         Usage: {
             /** Format: int64 */
@@ -636,6 +1113,577 @@ export interface operations {
             };
         };
     };
+    "list-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uploaded files. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileListResponse"];
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File service unreachable. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File endpoints are not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    "index-files": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional client session identifier. */
+                "X-Session-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileIndexRequest"];
+            };
+        };
+        responses: {
+            /** @description Indexing run accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileIndexResponse"];
+                };
+            };
+            /** @description Validation error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File service unreachable. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File endpoints or indexing are not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    "get-files-index-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Indexing run identifier returned by POST /v1/files/index. */
+                sync_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Indexing run status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileIndexStatusResponse"];
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Indexing run not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File service unreachable. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File endpoints are not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    "presign-file-upload": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional client session identifier. */
+                "X-Session-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FilePresignRequest"];
+            };
+        };
+        responses: {
+            /** @description Presigned upload URL. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilePresignResponse"];
+                };
+            };
+            /** @description Validation error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File exceeds the size limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unsupported file type. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File service unreachable. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File endpoints are not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    "delete-file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Filename to delete, as returned by GET /v1/files. */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File deleted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileDeleteResponse"];
+                };
+            };
+            /** @description Validation error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File service unreachable. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description File endpoints are not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    "list-research": {
+        parameters: {
+            query?: {
+                /** @description Max jobs to return (default 50, max 200). */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Research jobs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchListResponse"];
+                };
+            };
+            /** @description Invalid API key, or missing API key when keyless access is disabled. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    "start-research": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional client session identifier. */
+                "X-Session-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Research run accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchStartResponse"];
+                };
+            };
+            /** @description Validation error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Invalid API key, or missing API key when keyless access is disabled. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Insufficient prepaid balance. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited, or too many concurrent research jobs. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Internal error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    "get-research": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Research job id. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Research job status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchJobResponse"];
+                };
+            };
+            /** @description Invalid API key, or missing API key when keyless access is disabled. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Research job not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     search: {
         parameters: {
             query?: never;
@@ -725,6 +1773,88 @@ export interface operations {
                 };
             };
             /** @description Search infrastructure unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    "get-search-integration-results": {
+        parameters: {
+            query?: {
+                /** @description Maximum results in this page. */
+                limit?: number;
+                /** @description Opaque cursor returned by the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Search identifier returned by POST /v1/search. */
+                search_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stored integration results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationResultsResponse"];
+                };
+            };
+            /** @description Invalid limit or cursor. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Search not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Stored integration results are unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

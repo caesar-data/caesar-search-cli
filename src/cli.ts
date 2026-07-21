@@ -5,6 +5,7 @@ import { registerAuth } from "./commands/auth";
 import { registerCompletion } from "./commands/completion";
 import { registerConfig } from "./commands/config";
 import { registerFeedback } from "./commands/feedback";
+import { registerFiles } from "./commands/files";
 import { registerRead } from "./commands/read";
 import { registerSearch } from "./commands/search";
 import { registerUpdate } from "./commands/update";
@@ -48,6 +49,7 @@ Environment:
   registerSearch(program);
   registerRead(program);
   registerFeedback(program);
+  registerFiles(program);
   registerAuth(program);
   registerConfig(program);
   registerApi(program);
