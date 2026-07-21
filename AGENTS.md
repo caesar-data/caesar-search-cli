@@ -7,6 +7,7 @@ Guidance for AI agents using and maintaining `caesar-search`.
 - Always pass `--json` for machine-readable output. Data goes to stdout; errors are a JSON envelope `{"error":{"code","message","hint"}}` on stderr.
 - Exit codes: `0` ok, `2` bad input, `3` auth, `4` API error, `5` timeout. Branch on these, not on output parsing.
 - The standard loop: `search` → pick a `doc_id` → `read` it → optionally `feedback`.
+- File uploads: `files upload <path...>` presigns, PUTs the bytes straight to storage (the API key never reaches storage), and auto-triggers indexing (`--no-index` to batch, then `files index` once). Manage with `files list` / `files delete <name>` / `files status <sync-id>`.
 - For big results, write to a file instead of stdout: `-o /tmp/results.json` suppresses stdout entirely, so harness output limits can't truncate the JSON mid-parse. Read the file afterwards.
 - If a flag errors as unknown, the installed CLI is outdated: run `caesar-search update`, then retry. `caesar-search update --check --json` reports `{current, latest, update_available, channel}` without installing.
 
