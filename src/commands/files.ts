@@ -38,6 +38,20 @@ function formatSize(bytes: number | undefined): string {
   return `${bytes} B`;
 }
 
+/** What happened to the files that did make it up, for error hints. */
+function uploadNote(uploaded: { name: string }[], index: IndexResponse | undefined): string {
+  const names = uploaded.map((file) => file.name).join(", ");
+  return index
+    ? `${uploaded.length} file(s) uploaded and indexing started (${index.sync_id}): ${names}.`
+    : `${uploaded.length} file(s) uploaded but not indexed: ${names}. Run: caesar-search files index`;
+}
+
+/** Re-throw a CliError with the upload note appended to its hint. */
+function withNote(error: unknown, note: string): unknown {
+  if (!(error instanceof CliError)) return error;
+  return new CliError(error.code, error.message, error.exitCode, error.hint ? `${error.hint} ${note}` : note);
+}
+
 function readLocalFile(path: string): Buffer {
   try {
     return readFileSync(path);
@@ -128,6 +142,12 @@ Examples:
             size: bytes.byteLength,
             ...(options.contentType ? { content_type: options.contentType } : {}),
           })) as PresignResponse;
+          if (uploaded.some((file) => file.name === presigned.name)) {
+            throw badInput(
+              `duplicate stored filename: ${presigned.name}`,
+              "The server sanitized distinct paths to the same filename. Rename them and retry.",
+            );
+          }
           await putToStorage(presigned.url, bytes, options.contentType);
           uploaded.push({ name: presigned.name, size: bytes.byteLength });
         } catch (error) {
@@ -136,30 +156,20 @@ Examples:
         }
       }
 
-      // Files uploaded before a failure still get indexed and reported, so
-      // nothing lands in storage unsearchable and unmentioned.
+      // Whatever fails from here on, files that made it up are always indexed
+      // when possible and always named in the error hint — nothing lands in
+      // storage unsearchable and unmentioned.
       let index: IndexResponse | undefined;
       if (options.index && uploaded.length > 0) {
         try {
           index = (await client.post("/v1/files/index", { mode: "incremental" })) as IndexResponse;
         } catch (indexError) {
-          if (failure === undefined) throw indexError;
+          if (failure === undefined) throw withNote(indexError, uploadNote(uploaded, undefined));
         }
       }
 
       if (failure !== undefined) {
-        if (uploaded.length > 0 && failure instanceof CliError) {
-          const note = index
-            ? `${uploaded.length} earlier file(s) uploaded and indexing started (${index.sync_id}): ${uploaded.map((file) => file.name).join(", ")}.`
-            : `${uploaded.length} earlier file(s) uploaded but not indexed: ${uploaded.map((file) => file.name).join(", ")}. Run: caesar-search files index`;
-          throw new CliError(
-            failure.code,
-            failure.message,
-            failure.exitCode,
-            failure.hint ? `${failure.hint} ${note}` : note,
-          );
-        }
-        throw failure;
+        throw uploaded.length > 0 ? withNote(failure, uploadNote(uploaded, index)) : failure;
       }
 
       const payload = {
@@ -203,9 +213,15 @@ Examples:
       const client = clientFromCommand(command);
       const response = await client.request("DELETE", `/v1/files/${encodeURIComponent(name)}`);
       const body = response.body as { deleted?: boolean };
-      emitData(body, outputOptions(command), () =>
-        body.deleted === false ? `${name} was not deleted` : `deleted ${name}`,
-      );
+      if (body.deleted === false) {
+        throw new CliError(
+          "delete_failed",
+          `${name} was not deleted`,
+          EXIT_API,
+          "Check the exact name with: caesar-search files list",
+        );
+      }
+      emitData(body, outputOptions(command), () => `deleted ${name}`);
     });
 
   files

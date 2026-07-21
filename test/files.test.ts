@@ -207,7 +207,7 @@ describe("files upload", () => {
     const error = JSON.parse(result.stderr).error;
     expect(error.code).toBe("upload_failed");
     // The successful first upload is indexed and named in the hint.
-    expect(error.hint).toContain("1 earlier file(s) uploaded");
+    expect(error.hint).toContain("1 file(s) uploaded");
     expect(error.hint).toContain("a.txt");
     expect(error.hint).toContain("sync-1");
     expect(api.calls.map((call) => call.path)).toEqual([
@@ -215,6 +215,72 @@ describe("files upload", () => {
       "/v1/files/presign",
       "/v1/files/index",
     ]);
+  });
+
+  test("an index failure after successful uploads names the stranded files", async () => {
+    const storage = storageServer();
+    const api = track(
+      mockServer((call) => {
+        if (call.path === "/v1/files/presign") {
+          return {
+            body: {
+              url: `${storage.url}/obj`,
+              name: "notes.txt",
+              expires_in_seconds: 900,
+              max_object_bytes: 104857600,
+            },
+          };
+        }
+        // Non-retryable failure on the index call.
+        return { status: 400, body: { error: { code: "validation_error", message: "bad" } } };
+      }),
+    );
+    const path = tempFile("notes.txt", "hello");
+
+    const result = await runCli(["files", "upload", path, "--json"], {
+      env: { CAESAR_API_KEY: KEY, CAESAR_BASE_URL: api.url },
+    });
+
+    expect(result.code).toBe(4);
+    const error = JSON.parse(result.stderr).error;
+    expect(error.hint).toContain("1 file(s) uploaded but not indexed: notes.txt");
+    expect(error.hint).toContain("caesar-search files index");
+  });
+
+  test("server-sanitized name collisions stop before overwriting", async () => {
+    const storage = storageServer();
+    const api = track(
+      mockServer((call) => {
+        if (call.path === "/v1/files/presign") {
+          // Distinct inputs sanitize to the same stored name.
+          return {
+            body: {
+              url: `${storage.url}/obj`,
+              name: "sanitized.txt",
+              expires_in_seconds: 900,
+              max_object_bytes: 104857600,
+            },
+          };
+        }
+        if (call.path === "/v1/files/index") {
+          return { status: 202, body: { sync_id: "sync-1", state: "queued" } };
+        }
+        return { status: 500, body: { error: { code: "unexpected", message: call.path } } };
+      }),
+    );
+    const first = tempFile("a%.txt", "one");
+    const second = tempFile("b%.txt", "two");
+
+    const result = await runCli(["files", "upload", first, second, "--json"], {
+      env: { CAESAR_API_KEY: KEY, CAESAR_BASE_URL: api.url },
+    });
+
+    expect(result.code).toBe(2);
+    const error = JSON.parse(result.stderr).error;
+    expect(error.message).toContain("duplicate stored filename: sanitized.txt");
+    // The second PUT never happened, and the first upload was still indexed.
+    expect(storage.calls).toHaveLength(1);
+    expect(error.hint).toContain("indexing started (sync-1)");
   });
 
   test("a hung storage PUT exits 5 with timeout", async () => {
@@ -270,14 +336,15 @@ describe("files management", () => {
     expect(api.calls[0]?.path).toBe("/v1/files/My%20Report.pdf");
   });
 
-  test("delete renders the API's deleted flag truthfully", async () => {
+  test("deleted: false exits 4 so shell chains stop", async () => {
     const api = track(mockServer(() => ({ body: { deleted: false } })));
-    const result = await runCli(["files", "delete", "ghost.pdf"], {
+    const result = await runCli(["files", "delete", "ghost.pdf", "--json"], {
       env: { CAESAR_API_KEY: KEY, CAESAR_BASE_URL: api.url },
     });
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain("ghost.pdf was not deleted");
-    expect(result.stdout).not.toContain("deleted ghost.pdf");
+    expect(result.code).toBe(4);
+    const error = JSON.parse(result.stderr).error;
+    expect(error.code).toBe("delete_failed");
+    expect(error.message).toContain("ghost.pdf was not deleted");
   });
 
   test("index validates --mode and posts it", async () => {
