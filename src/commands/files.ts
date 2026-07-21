@@ -2,14 +2,17 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
-import { badInput, CliError, EXIT_API } from "../output/exit";
+import { badInput, CliError, EXIT_API, EXIT_TIMEOUT } from "../output/exit";
 import { emitData } from "../output/render";
 import { clientFromCommand, outputOptions } from "./common";
 
 const modeSchema = z.enum(["full", "incremental"]);
 
-/** Presigned uploads can be large; give the storage PUT more room than API calls. */
-const UPLOAD_TIMEOUT_MS = 120_000;
+/**
+ * Presigned uploads can be large; give the storage PUT more room than API
+ * calls. Overridable for very slow links (and for tests).
+ */
+const UPLOAD_TIMEOUT_MS = Number(process.env.CAESAR_UPLOAD_TIMEOUT_MS ?? "") || 120_000;
 
 interface PresignResponse {
   url: string;
@@ -58,6 +61,14 @@ async function putToStorage(url: string, bytes: Buffer, contentType: string | un
       signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
     });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new CliError(
+        "timeout",
+        `storage upload timed out after ${UPLOAD_TIMEOUT_MS}ms`,
+        EXIT_TIMEOUT,
+        "Check connectivity; the presigned URL expires after a few minutes.",
+      );
+    }
     throw new CliError(
       "upload_failed",
       `storage upload failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -95,22 +106,60 @@ Examples:
   caesar-search files upload ./scan.pdf --content-type application/pdf --json`,
     )
     .action(async (paths: string[], options: { contentType?: string; index: boolean }, command: Command) => {
-      const client = clientFromCommand(command);
-      const uploaded: { name: string; size: number }[] = [];
-      for (const path of paths) {
-        const bytes = readLocalFile(path);
-        const presigned = (await client.post("/v1/files/presign", {
-          filename: basename(path),
-          size: bytes.byteLength,
-          ...(options.contentType ? { content_type: options.contentType } : {}),
-        })) as PresignResponse;
-        await putToStorage(presigned.url, bytes, options.contentType);
-        uploaded.push({ name: presigned.name, size: bytes.byteLength });
+      // Uploads are keyed by basename, so later duplicates would silently
+      // replace earlier ones while both report success.
+      const names = paths.map((path) => basename(path));
+      const duplicates = [...new Set(names.filter((name, i) => names.indexOf(name) !== i))];
+      if (duplicates.length > 0) {
+        throw badInput(
+          `duplicate filename(s): ${duplicates.join(", ")}`,
+          "Files are stored by filename, so these would overwrite each other. Rename them and retry.",
+        );
       }
 
+      const client = clientFromCommand(command);
+      const uploaded: { name: string; size: number }[] = [];
+      let failure: unknown;
+      for (const path of paths) {
+        try {
+          const bytes = readLocalFile(path);
+          const presigned = (await client.post("/v1/files/presign", {
+            filename: basename(path),
+            size: bytes.byteLength,
+            ...(options.contentType ? { content_type: options.contentType } : {}),
+          })) as PresignResponse;
+          await putToStorage(presigned.url, bytes, options.contentType);
+          uploaded.push({ name: presigned.name, size: bytes.byteLength });
+        } catch (error) {
+          failure = error;
+          break;
+        }
+      }
+
+      // Files uploaded before a failure still get indexed and reported, so
+      // nothing lands in storage unsearchable and unmentioned.
       let index: IndexResponse | undefined;
-      if (options.index) {
-        index = (await client.post("/v1/files/index", { mode: "incremental" })) as IndexResponse;
+      if (options.index && uploaded.length > 0) {
+        try {
+          index = (await client.post("/v1/files/index", { mode: "incremental" })) as IndexResponse;
+        } catch (indexError) {
+          if (failure === undefined) throw indexError;
+        }
+      }
+
+      if (failure !== undefined) {
+        if (uploaded.length > 0 && failure instanceof CliError) {
+          const note = index
+            ? `${uploaded.length} earlier file(s) uploaded and indexing started (${index.sync_id}): ${uploaded.map((file) => file.name).join(", ")}.`
+            : `${uploaded.length} earlier file(s) uploaded but not indexed: ${uploaded.map((file) => file.name).join(", ")}. Run: caesar-search files index`;
+          throw new CliError(
+            failure.code,
+            failure.message,
+            failure.exitCode,
+            failure.hint ? `${failure.hint} ${note}` : note,
+          );
+        }
+        throw failure;
       }
 
       const payload = {
@@ -153,7 +202,10 @@ Examples:
     .action(async (name: string, _options, command: Command) => {
       const client = clientFromCommand(command);
       const response = await client.request("DELETE", `/v1/files/${encodeURIComponent(name)}`);
-      emitData(response.body, outputOptions(command), () => `deleted ${name}`);
+      const body = response.body as { deleted?: boolean };
+      emitData(body, outputOptions(command), () =>
+        body.deleted === false ? `${name} was not deleted` : `deleted ${name}`,
+      );
     });
 
   files

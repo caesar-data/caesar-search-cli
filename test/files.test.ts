@@ -154,6 +154,93 @@ describe("files upload", () => {
     const result = await runCli(["files", "list"], {});
     expect(result.code).toBe(3);
   });
+
+  test("duplicate basenames exit 2 before any API call", async () => {
+    const api = apiServer("http://127.0.0.1:9");
+    const first = tempFile("file.txt", "one");
+    const second = tempFile("file.txt", "two");
+
+    const result = await runCli(["files", "upload", first, second, "--json"], {
+      env: { CAESAR_API_KEY: KEY, CAESAR_BASE_URL: api.url },
+    });
+
+    expect(result.code).toBe(2);
+    expect(JSON.parse(result.stderr).error.message).toContain("file.txt");
+    expect(api.calls).toHaveLength(0);
+  });
+
+  test("a mid-batch failure still indexes and reports the earlier uploads", async () => {
+    let puts = 0;
+    const storage = track(
+      mockServer(() => {
+        puts += 1;
+        return puts === 1 ? { status: 200, body: "" } : { status: 403, body: "denied" };
+      }),
+    );
+    const api = track(
+      mockServer((call) => {
+        if (call.path === "/v1/files/presign") {
+          const filename = (call.body as { filename: string }).filename;
+          return {
+            body: {
+              url: `${storage.url}/bucket/org/${filename}`,
+              name: filename,
+              expires_in_seconds: 900,
+              max_object_bytes: 104857600,
+            },
+          };
+        }
+        if (call.path === "/v1/files/index") {
+          return { status: 202, body: { sync_id: "sync-1", state: "queued" } };
+        }
+        return { status: 500, body: { error: { code: "unexpected", message: call.path } } };
+      }),
+    );
+    const first = tempFile("a.txt", "one");
+    const second = tempFile("b.txt", "two");
+
+    const result = await runCli(["files", "upload", first, second, "--json"], {
+      env: { CAESAR_API_KEY: KEY, CAESAR_BASE_URL: api.url },
+    });
+
+    expect(result.code).toBe(4);
+    const error = JSON.parse(result.stderr).error;
+    expect(error.code).toBe("upload_failed");
+    // The successful first upload is indexed and named in the hint.
+    expect(error.hint).toContain("1 earlier file(s) uploaded");
+    expect(error.hint).toContain("a.txt");
+    expect(error.hint).toContain("sync-1");
+    expect(api.calls.map((call) => call.path)).toEqual([
+      "/v1/files/presign",
+      "/v1/files/presign",
+      "/v1/files/index",
+    ]);
+  });
+
+  test("a hung storage PUT exits 5 with timeout", async () => {
+    const hang = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) });
+    const api = track(
+      mockServer(() => ({
+        body: {
+          url: `http://127.0.0.1:${hang.port}/obj`,
+          name: "notes.txt",
+          expires_in_seconds: 900,
+          max_object_bytes: 104857600,
+        },
+      })),
+    );
+    const path = tempFile("notes.txt", "hello");
+
+    try {
+      const result = await runCli(["files", "upload", path, "--json"], {
+        env: { CAESAR_API_KEY: KEY, CAESAR_BASE_URL: api.url, CAESAR_UPLOAD_TIMEOUT_MS: "150" },
+      });
+      expect(result.code).toBe(5);
+      expect(JSON.parse(result.stderr).error.code).toBe("timeout");
+    } finally {
+      hang.stop(true);
+    }
+  });
 });
 
 describe("files management", () => {
@@ -181,6 +268,16 @@ describe("files management", () => {
     expect(result.stdout).toContain("deleted My Report.pdf");
     expect(api.calls[0]?.method).toBe("DELETE");
     expect(api.calls[0]?.path).toBe("/v1/files/My%20Report.pdf");
+  });
+
+  test("delete renders the API's deleted flag truthfully", async () => {
+    const api = track(mockServer(() => ({ body: { deleted: false } })));
+    const result = await runCli(["files", "delete", "ghost.pdf"], {
+      env: { CAESAR_API_KEY: KEY, CAESAR_BASE_URL: api.url },
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("ghost.pdf was not deleted");
+    expect(result.stdout).not.toContain("deleted ghost.pdf");
   });
 
   test("index validates --mode and posts it", async () => {
