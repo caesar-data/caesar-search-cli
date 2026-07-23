@@ -228,6 +228,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get organization usage
+         * @description Usage analytics for the API key's organization: request and error totals, latency, per-key and per-endpoint breakdowns, and billable product spend. Defaults to the last 30 days in day buckets (UTC).
+         */
+        get: operations["get-usage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -906,6 +926,177 @@ export interface components {
             /** Format: int64 */
             bytes_returned: number;
             /** Format: int64 */
+            requests: number;
+        };
+        UsageEndpointSummary: {
+            /**
+             * Format: int64
+             * @description 4xx/5xx responses on this route.
+             */
+            errors: number;
+            /** @description Human label for known routes; raw route otherwise. */
+            label: string;
+            /**
+             * Format: double
+             * @description 95th-percentile duration on this route.
+             */
+            p95_duration_ms: number;
+            /**
+             * Format: int64
+             * @description Requests to this route.
+             */
+            requests: number;
+            /** @description Public API route, e.g. /v1/search. */
+            route: string;
+        };
+        UsageHeadline: {
+            /**
+             * Format: double
+             * @description Mean request duration.
+             */
+            avg_duration_ms: number;
+            /**
+             * Format: double
+             * @description errors / requests; 0 when there are no requests.
+             */
+            error_rate: number;
+            /**
+             * Format: int64
+             * @description Requests that answered 4xx or 5xx.
+             */
+            errors: number;
+            /**
+             * Format: double
+             * @description 95th-percentile request duration.
+             */
+            p95_duration_ms: number;
+            /**
+             * Format: int64
+             * @description Total API requests in the window.
+             */
+            requests: number;
+            /**
+             * Format: double
+             * @description Billable platform spend in exact (possibly fractional) cents.
+             */
+            spend_cents: number;
+        };
+        UsageKeySummary: {
+            /** @description API key identifier. */
+            api_key_id: string;
+            /**
+             * Format: int64
+             * @description 4xx/5xx responses attributed to this key.
+             */
+            errors: number;
+            /** @description Public key prefix (never the secret). */
+            key_prefix: string;
+            /** @description Most recent request time (RFC 3339). */
+            last_used_at: string;
+            /** @description Key name; deleted keys are suffixed "(deleted)". */
+            name: string;
+            /**
+             * Format: double
+             * @description 95th-percentile duration for this key.
+             */
+            p95_duration_ms: number;
+            /**
+             * Format: int64
+             * @description Requests attributed to this key.
+             */
+            requests: number;
+            /**
+             * Format: double
+             * @description Billable spend attributed to this key, exact cents.
+             */
+            spend_cents: number;
+            /**
+             * @description Key lifecycle state.
+             * @enum {string}
+             */
+            status: "active" | "deleted";
+        };
+        UsageLatencyPoint: {
+            /**
+             * Format: double
+             * @description Mean request duration in this bucket.
+             */
+            avg_duration_ms: number;
+            /** @description Bucket start (RFC 3339, UTC-aligned). */
+            bucket: string;
+            /**
+             * Format: double
+             * @description 95th-percentile duration in this bucket.
+             */
+            p95_duration_ms: number;
+        };
+        UsageOverviewResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://alpha.api.trycaesar.com/UsageOverviewResponse.json
+             */
+            readonly $schema?: string;
+            /** @description Per-route breakdown, requests desc. */
+            endpoints: components["schemas"]["UsageEndpointSummary"][] | null;
+            /** @description Window totals. */
+            headline: components["schemas"]["UsageHeadline"];
+            /** @description Per-API-key breakdown, requests desc. */
+            keys: components["schemas"]["UsageKeySummary"][] | null;
+            /** @description Latency per bucket, ungrouped. */
+            latency_series: components["schemas"]["UsageLatencyPoint"][] | null;
+            /** @description Billable products and spend. */
+            products: components["schemas"]["UsageProductSummary"][] | null;
+            /** @description The resolved query window. */
+            range: components["schemas"]["UsageRange"];
+            /** @description Requests per bucket, zero-filled. */
+            series: components["schemas"]["UsageSeriesPoint"][] | null;
+        };
+        UsageProductSummary: {
+            /** @description Human product label. */
+            label: string;
+            /** @description Billable product identifier (web_search, document_get, research). */
+            product: string;
+            /**
+             * Format: int64
+             * @description Metered billable count.
+             */
+            requests: number;
+            /**
+             * Format: double
+             * @description Spend for this product in the window.
+             */
+            spend_cents: number;
+        };
+        UsageRange: {
+            /** @description Window start (RFC 3339, inclusive). */
+            from: string;
+            /**
+             * @description Bucket size of the series.
+             * @enum {string}
+             */
+            interval: "hour" | "day";
+            /** @description Always UTC. */
+            timezone: string;
+            /** @description Window end (RFC 3339, exclusive). */
+            to: string;
+        };
+        UsageSeriesPoint: {
+            /** @description Bucket start (RFC 3339, UTC-aligned). */
+            bucket: string;
+            /**
+             * Format: int64
+             * @description 4xx/5xx responses in this bucket.
+             */
+            errors: number;
+            /** @description Group identifier when the series is grouped, null otherwise. */
+            group_id: string | null;
+            /** @description Human label for the group, null when ungrouped. */
+            group_label: string | null;
+            /**
+             * Format: int64
+             * @description Requests in this bucket.
+             */
             requests: number;
         };
         Warning: {
@@ -1855,6 +2046,91 @@ export interface operations {
                 };
             };
             /** @description Stored integration results are unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    "get-usage": {
+        parameters: {
+            query?: {
+                /** @description Window start (ISO 8601). Default: 30 days before to. */
+                from?: string;
+                /** @description Window end (ISO 8601). Default: now. */
+                to?: string;
+                /** @description Bucket size for the series. Default day; hour requires a range of at most 8 days. */
+                interval?: "" | "hour" | "day";
+                /** @description Comma-separated API key uuids to filter by (at most 50). */
+                api_key_ids?: string;
+                /** @description Optional grouping of the request series. */
+                group_by?: "" | "none" | "api_key" | "endpoint" | "status_class";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organization usage overview. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageOverviewResponse"];
+                };
+            };
+            /** @description Invalid range or filter. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Missing or invalid API key. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description API key does not have the required scope. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Rate limited. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Usage service unreachable. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Usage endpoint is not configured. */
             503: {
                 headers: {
                     [name: string]: unknown;

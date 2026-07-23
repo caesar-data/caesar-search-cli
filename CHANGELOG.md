@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New `usage` command (CAE-12): organization usage from `GET /v1/usage` — headline KPIs, request sparkline, per-endpoint and per-key tables, billable products and spend. Flags: `--from`, `--to`, `--interval <hour|day>`, `--key-id <uuid>` (repeatable).
+
 ## 0.5.0
 
 - Breaking: the search API no longer returns `usage.approx_tokens`; the CLI no longer displays approximate token counts.
