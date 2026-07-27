@@ -8,6 +8,7 @@ Guidance for AI agents using and maintaining `caesar-search`.
 - Exit codes: `0` ok, `2` bad input, `3` auth, `4` API error, `5` timeout. Branch on these, not on output parsing.
 - The standard loop: `search` → pick a `doc_id` → `read` it → optionally `feedback`.
 - File uploads: `files upload <path...>` presigns, PUTs the bytes straight to storage (the API key never reaches storage), and auto-triggers indexing (`--no-index` to batch, then `files index` once). Manage with `files list` / `files delete <name>` / `files status <sync-id>`.
+- `usage --json` returns the organization's API usage overview (requests, errors, latency, per-key/per-endpoint breakdowns, spend in `spend_cents`); date filters are `--from`/`--to` (ISO 8601), buckets `--interval hour|day`, key filter `--key-id <uuid>` (repeatable).
 - For big results, write to a file instead of stdout: `-o /tmp/results.json` suppresses stdout entirely, so harness output limits can't truncate the JSON mid-parse. Read the file afterwards.
 - If a flag errors as unknown, the installed CLI is outdated: run `caesar-search update`, then retry. `caesar-search update --check --json` reports `{current, latest, update_available, channel}` without installing.
 
@@ -34,6 +35,7 @@ caesar-search feedback --event-type result_helpful --search-id $SID --doc-id $DI
 | Shell-redirecting and also reading stdout | Use `-o <file>`; it suppresses stdout so nothing competes with the file |
 | `npm update -g` / `brew upgrade` by hand | `caesar-search update` picks the right channel itself |
 | Expecting camelCase JSON | All fields are snake_case, exactly as the API returns them |
+| `usage --key <uuid>` to filter by key | `--key` overrides the API key; the filter flag is `--key-id` |
 | `caesar search` | The binary is `caesar-search` |
 
 ## Maintaining this repo

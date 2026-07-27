@@ -9,6 +9,7 @@ import { registerFiles } from "./commands/files";
 import { registerRead } from "./commands/read";
 import { registerSearch } from "./commands/search";
 import { registerUpdate } from "./commands/update";
+import { registerUsage } from "./commands/usage";
 import { setKeychainLookup } from "./config";
 import { EXIT_BAD_INPUT } from "./output/exit";
 import { emitData, emitError } from "./output/render";
@@ -50,6 +51,7 @@ Environment:
   registerRead(program);
   registerFeedback(program);
   registerFiles(program);
+  registerUsage(program);
   registerAuth(program);
   registerConfig(program);
   registerApi(program);

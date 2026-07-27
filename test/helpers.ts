@@ -42,6 +42,7 @@ export async function runCli(
 export interface MockCall {
   method: string;
   path: string;
+  query: Record<string, string>;
   headers: Record<string, string>;
   body: unknown;
 }
@@ -73,6 +74,7 @@ export function mockServer(
       const call: MockCall = {
         method: request.method,
         path: url.pathname,
+        query: Object.fromEntries(url.searchParams.entries()),
         headers: Object.fromEntries(request.headers.entries()),
         body,
       };

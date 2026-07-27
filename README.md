@@ -29,6 +29,7 @@ caesar-search read <url|doc_id|->  read a page as markdown; --query --max-chars 
 caesar-search feedback             send result feedback; --event-type --search-id --doc-id
 caesar-search files upload <path...>  upload to your files knowledge base; --no-index --content-type
 caesar-search files list|delete|index|status  manage uploads and indexing runs
+caesar-search usage                org usage: requests, errors, latency, spend; --from --to --interval --key-id
 caesar-search auth status|login|logout  login opens a browser; --device for SSH; --key for direct entry
 caesar-search config get|set|unset|list|path
 caesar-search api <method> <path>  authenticated raw API call (escape hatch)
